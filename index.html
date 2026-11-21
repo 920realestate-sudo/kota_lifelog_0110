@@ -30,6 +30,20 @@ body.noscroll{overflow:hidden}
 main{padding:12px 14px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:12px}
 .card h3{margin:0 0 8px;font-size:15px}
+ .cal-h{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;font-size:12px;color:var(--muted);margin-bottom:4px}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.cd{min-height:78px;border:1px solid var(--line);background:#fff;border-radius:10px;padding:4px 1px 2px;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:13px;color:var(--text);font-family:inherit}
+.cd.has{background:var(--pri-l)} .cd.tdy{outline:2px solid var(--pri);outline-offset:-1px}
+.cd .wx{font-size:10px;line-height:1.2;color:var(--muted);white-space:nowrap}
+.wxc{display:flex;align-items:center;gap:10px}
+.wxc .big{font-size:34px;line-height:1}
+.wxs{font-size:12px;color:var(--muted)}
+.wxs a{color:var(--muted)}
+.plist button{display:block;width:100%;text-align:left;min-height:44px;padding:8px 12px;margin-bottom:6px;border:1px solid var(--line);border-radius:12px;background:#fff;font-size:15px;color:var(--text);font-family:inherit}
+.cd.blank{border:none;background:none;pointer-events:none}
+.cd .n{font-weight:700;line-height:1.2} .cd.sun .n{color:var(--err)} .cd.sat .n{color:#3b6fd6}
+.cd .ic{font-size:10px;line-height:1.2;text-align:center;word-break:break-all;padding:0 1px}
+.cd:active{transform:scale(.96)}
 .datebar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px}
 .datebar .d{font-size:18px;font-weight:700;text-align:center;flex:1}
 .iconbtn{width:44px;height:44px;border:1px solid var(--line);background:#fff;border-radius:12px;font-size:18px;color:var(--text)}
@@ -104,7 +118,8 @@ svg.chart text{font-size:10px;fill:var(--muted)}
   </header>
   <main id="view"></main>
   <nav class="tabs"><div class="in" id="tabs">
-    <button data-tab="today"><span class="i">📅</span>今日</button>
+    <button data-tab="cal"><span class="i">🗓️</span>カレンダー</button>
+    <button data-tab="today"><span class="i">📝</span>1日</button>
     <button data-tab="graph"><span class="i">📈</span>グラフ</button>
     <button data-tab="med"><span class="i">🏥</span>通院・病気</button>
     <button data-tab="settings"><span class="i">⚙️</span>設定</button>
@@ -181,7 +196,7 @@ function pendingCount() {
 }
 
 /* ================= 画面状態 ================= */
-var ui = { tab: 'today', date: today(), range: 30, med: 'visits' };
+var ui = { tab: 'cal', date: today(), cal: today().slice(0, 7), range: 30, med: 'visits' };
 
 var KINDS = {
   meal: { label: 'ごはん', icon: '🍚', valueLabel: '量 (g)', textLabel: 'メニュー', suggest: true },
@@ -191,7 +206,8 @@ var KINDS = {
   pee: { label: 'おしっこ', icon: '💦' },
   weight: { label: '体重', icon: '⚖️', valueLabel: '体重 (g)' },
   weather: { label: '天気', icon: '☀️', textLabel: '天気', options: ['晴れ', 'くもり', '雨', '雪'], textRequired: true },
-  note: { label: '所見', icon: '📝', textLabel: '今日の様子', textarea: true, textRequired: true }
+  note: { label: '所見', icon: '📝', textLabel: '今日の様子', textarea: true, textRequired: true },
+  place: { label: '場所', icon: '📍' }
 };
 var QUICK = ['meal', 'walk', 'poop', 'pee', 'weight', 'water', 'weather', 'note'];
 
@@ -211,6 +227,7 @@ function describe(l) {
   else if (l.kind === 'water') { parts.push('水分 ' + num(l.value) + 'g'); }
   else if (l.kind === 'weather') { parts.push('天気：' + l.text_value); }
   else if (l.kind === 'note') { parts.push(l.text_value); }
+  else if (l.kind === 'place') { parts.push('この日の場所：' + (l.text_value || '')); }
   else { parts.push(K.label); }
   return K.icon + ' ' + parts.join(' ');
 }
@@ -308,7 +325,9 @@ async function sync(manual) {
   } catch (e) { syncErr = friendly(e); if (manual) toast('⚠ ' + syncErr); }
   syncing = false; setStatus(); refreshAfterSync();
 }
-function refreshAfterSync() { if ($('#sheetWrap').hidden) render(true); $('#dogTitle').textContent = dogName() ? dogName() + 'ノート' : '愛犬ノート'; }
+function refreshAfterSync() {
+  var ae = document.activeElement, typing = ui.tab === 'settings' && ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName), pr = $('#placeRes'), hasRes = !!(pr && pr.innerHTML);
+  if ($('#sheetWrap').hidden && !typing && !hasRes) render(true); $('#dogTitle').textContent = dogName() ? dogName() + 'ノート' : '愛犬ノート'; }
 
 /* ================= 写真 ================= */
 var urlCache = {};
@@ -367,21 +386,170 @@ async function uploadPhotos(files) {
 function render(keep) {
   var y = keep ? window.scrollY : 0;
   var v = $('#view');
-  if (ui.tab === 'today') v.innerHTML = viewToday();
+  if (ui.tab === 'cal') v.innerHTML = viewCal();
+  else if (ui.tab === 'today') v.innerHTML = viewToday();
   else if (ui.tab === 'graph') v.innerHTML = viewGraph();
   else if (ui.tab === 'med') v.innerHTML = viewMed();
   else v.innerHTML = viewSettings();
   Array.prototype.forEach.call(document.querySelectorAll('#tabs button'), function (b) { b.classList.toggle('on', b.getAttribute('data-tab') === ui.tab); });
   $('#dogTitle').textContent = dogName() ? dogName() + 'ノート' : '愛犬ノート';
-  setStatus(); hydratePhotos();
+  setStatus(); hydratePhotos(); wxKick();
   if (keep) window.scrollTo(0, y); else window.scrollTo(0, 0);
+}
+
+/* ================= 天気（Open-Meteo） ================= */
+var WXK = 'dogapp_wx_v1';
+var DEFAULT_HOME = { name: '足立区', lat: 35.7756, lon: 139.8044 };
+var wx = {}; try { wx = JSON.parse(lsGet(WXK) || '{}') || {}; } catch (e) { wx = {}; }
+var wxBusy = {}, wxFailAt = 0, placeRes = [], placeCtx = '';
+var MAN_ICON = { '晴れ': '☀️', 'くもり': '☁️', '雨': '🌧️', '雪': '❄️' };
+function wxIcon(c) {
+  c = Number(c); if (c === 0 || c === 1) return '☀️'; if (c === 2) return '⛅'; if (c === 3) return '☁️'; if (c === 45 || c === 48) return '🌫️';
+  if (c >= 51 && c <= 57) return '🌦️'; if ((c >= 61 && c <= 67) || (c >= 80 && c <= 82)) return '🌧️'; if ((c >= 71 && c <= 77) || c === 85 || c === 86) return '❄️'; if (c >= 95) return '⛈️'; return '🌡️';
+}
+function wxLabel(c) {
+  c = Number(c); if (c === 0) return '快晴'; if (c === 1) return '晴れ'; if (c === 2) return '薄曇り'; if (c === 3) return 'くもり'; if (c === 45 || c === 48) return '霧';
+  if (c >= 51 && c <= 57) return '霧雨'; if (c >= 61 && c <= 67) return '雨'; if (c >= 71 && c <= 77) return '雪'; if (c >= 80 && c <= 82) return 'にわか雨'; if (c === 85 || c === 86) return 'にわか雪'; if (c >= 95) return '雷雨'; return '—';
+}
+function homePlace() { var h = data.profile && data.profile.home; return (h && isFinite(h.lat) && isFinite(h.lon)) ? h : DEFAULT_HOME; }
+function placeLogOn(d) {
+  var best = null;
+  data.logs.forEach(function (l) { if (!l.deleted && l.kind === 'place' && String(l.at).slice(0, 10) === d && (!best || l.at > best.at)) best = l; });
+  return best;
+}
+function placeFor(d) {
+  var pl = placeLogOn(d);
+  if (pl) { var c = String(pl.memo || '').split(','), la = parseFloat(c[0]), lo = parseFloat(c[1]); if (isFinite(la) && isFinite(lo)) return { name: pl.text_value || '', lat: la, lon: lo, custom: true, id: pl.id }; }
+  var h = homePlace(); return { name: h.name, lat: Number(h.lat), lon: Number(h.lon), custom: false };
+}
+function locKey(p) { return (Math.round(p.lat * 100) / 100) + ',' + (Math.round(p.lon * 100) / 100); }
+function wxGet(d) { var m = wx[locKey(placeFor(d))]; return m ? (m[d] || null) : null; }
+function manualWx(d) { var v = null; dayLogs(d).forEach(function (l) { if (l.kind === 'weather' && l.text_value) v = l.text_value; }); return v; }
+function wxNeeds(m, d) { var e = m[d]; if (!e) return true; if (e.t >= parseYmd(d).getTime() + 3 * 864e5) return false; return Date.now() - e.t > 3 * 36e5; }
+async function fetchWxRange(url, place, dates, m) {
+  var a = dates[0].replace(/\//g, '-'), b = dates[dates.length - 1].replace(/\//g, '-');
+  var q = url + '?latitude=' + place.lat + '&longitude=' + place.lon + '&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset&timezone=auto&start_date=' + a + '&end_date=' + b;
+  var r = await fetch(q); if (!r.ok) throw new Error('weather ' + r.status);
+  var j = await r.json(), dd = j && j.daily; if (!dd || !dd.time) return false;
+  var any = false;
+  dd.time.forEach(function (t, i) {
+    var wc = dd.weather_code ? dd.weather_code[i] : null, hi = dd.temperature_2m_max ? dd.temperature_2m_max[i] : null, lo = dd.temperature_2m_min ? dd.temperature_2m_min[i] : null;
+    if (wc == null && hi == null) return;
+    m[String(t).replace(/-/g, '/')] = { c: wc, hi: hi, lo: lo, sr: dd.sunrise && dd.sunrise[i] ? String(dd.sunrise[i]).slice(11, 16) : '', ss: dd.sunset && dd.sunset[i] ? String(dd.sunset[i]).slice(11, 16) : '', t: Date.now() };
+    any = true;
+  });
+  return any;
+}
+async function ensureWx(dates, place) {
+  var key = locKey(place), m = wx[key] || (wx[key] = {});
+  var maxD = addDays(today(), 15), lim = addDays(today(), -85);
+  var need = dates.filter(function (d) { return d <= maxD && wxNeeds(m, d); }).sort();
+  if (!need.length) return false;
+  var bk = key + '|' + need[0] + '|' + need[need.length - 1]; if (wxBusy[bk]) return false; wxBusy[bk] = 1;
+  try {
+    var rec = need.filter(function (d) { return d >= lim; }), old = need.filter(function (d) { return d < lim; }), ch = false;
+    if (rec.length) ch = (await fetchWxRange('https://api.open-meteo.com/v1/forecast', place, rec, m)) || ch;
+    if (old.length) ch = (await fetchWxRange('https://archive-api.open-meteo.com/v1/archive', place, old, m)) || ch;
+    if (ch) lsSet(WXK, JSON.stringify(wx));
+    return ch;
+  } catch (e) { wxFailAt = Date.now(); return false; } finally { delete wxBusy[bk]; }
+}
+async function wxKick() {
+  if (Date.now() - wxFailAt < 60000) return;
+  var dates = [];
+  if (ui.tab === 'cal') { var dim = new Date(+ui.cal.slice(0, 4), +ui.cal.slice(5, 7), 0).getDate(); for (var i = 1; i <= dim; i++) dates.push(ui.cal + '/' + pad(i)); }
+  else if (ui.tab === 'today') dates = [ui.date];
+  else return;
+  var groups = {};
+  dates.forEach(function (d) { var p = placeFor(d), k = locKey(p); (groups[k] || (groups[k] = { p: p, ds: [] })).ds.push(d); });
+  var changed = false;
+  for (var k in groups) { if (await ensureWx(groups[k].ds, groups[k].p)) changed = true; }
+  if (changed && $('#sheetWrap').hidden && (ui.tab === 'cal' || ui.tab === 'today')) render(true);
+}
+function wxCard(d) {
+  var p = placeFor(d), e = wxGet(d), man = manualWx(d), h = '<div class="card">';
+  h += '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px"><div style="font-size:14px">📍 ' + esc(p.name || '—') + (p.custom ? '<span class="chip s mute" style="margin-left:6px">この日だけ</span>' : '') + '</div><button class="btn sec" style="min-height:36px;padding:0 12px;font-size:14px" data-act="place">場所を変更</button></div>';
+  if (e || man) {
+    var ic = man ? (MAN_ICON[man] || '🌡️') : wxIcon(e.c), lb = man ? man + '（記録）' : wxLabel(e.c);
+    h += '<div class="wxc"><div class="big">' + ic + '</div><div><div style="font-weight:700">' + esc(lb) + '</div>' +
+      (e && e.hi != null ? '<div style="font-size:14px">最高 ' + Math.round(e.hi) + '° ／ 最低 ' + Math.round(e.lo) + '°</div>' : '') +
+      (e && e.sr ? '<div style="font-size:14px">🌅 日の出 ' + esc(e.sr) + '　🌇 日の入り ' + esc(e.ss) + '</div>' : '') + '</div></div>';
+  } else h += '<div class="hint">' + (Date.now() - wxFailAt < 60000 ? '天気を取得できませんでした（通信を確認してください）' : '天気を取得しています…') + '</div>';
+  return h + '<div class="wxs" style="margin-top:6px">Weather data by <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo.com</a></div></div>';
+}
+async function placeSearch(q) {
+  var box = $('#placeRes'); if (!box) return;
+  q = (q || '').trim(); if (!q) { box.innerHTML = '<div class="hint">地域名を入力してください。</div>'; return; }
+  box.innerHTML = '<div class="hint">検索しています…</div>';
+  try {
+    var r = await fetch('https://geocoding-api.open-meteo.com/v1/search?name=' + encodeURIComponent(q) + '&count=8&language=ja&format=json');
+    if (!r.ok) throw new Error('geocoding ' + r.status);
+    var j = await r.json(); placeRes = (j.results || []).filter(function (x) { return isFinite(x.latitude) && isFinite(x.longitude); });
+    box.innerHTML = placeRes.length ? '<div class="plist">' + placeRes.map(function (x, i) { return '<button type="button" data-act="placePick" data-i="' + i + '">' + esc(x.name) + '<span class="hint">　' + esc([x.admin2, x.admin1, x.country].filter(Boolean).join(' / ')) + '</span></button>'; }).join('') + '</div>' : '<div class="hint">見つかりませんでした。別の書き方（例：「足立区」「箱根」）を試してください。</div>';
+  } catch (e) { box.innerHTML = '<div class="msg err">⚠ 検索できませんでした（通信を確認してください）</div>'; }
+}
+function pickedPlace(i) { var x = placeRes[+i]; return x ? { name: x.name, lat: Math.round(x.latitude * 10000) / 10000, lon: Math.round(x.longitude * 10000) / 10000 } : null; }
+function setHome(pl) {
+  data.profile = Object.assign({}, data.profile, { home: pl }); data.profileAt = nowStr(); dirty.profile.profile = data.profileAt; saveLocal(); scheduleSync();
+}
+function openPlace(d) {
+  placeCtx = d; placeRes = []; var cur = placeFor(d);
+  openSheet('📍 ' + dateLabel(d) + ' の場所',
+    '<div class="hint" style="margin-bottom:8px">いまの場所：<b>' + esc(cur.name) + '</b>' + (cur.custom ? '（この日だけ）' : '（普段の場所）') + '。旅行先などは、この日の天気をその地域のものにできます。</div>' +
+    '<div class="row" style="margin-bottom:8px"><input id="placeQ" style="flex:1;min-height:46px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;font-size:16px;font-family:inherit" placeholder="例：箱根、大阪市" autocomplete="off"><button class="btn" data-act="placeSearch">検索</button></div>' +
+    '<div id="placeRes"></div>' + (cur.custom ? '<button class="btn danger block" style="margin-top:8px" data-act="placeReset">普段の場所にもどす</button>' : ''));
+}
+function voidPlaceLogs(d) { data.logs.forEach(function (l) { if (!l.deleted && l.kind === 'place' && String(l.at).slice(0, 10) === d) { l.deleted = true; touch('logs', l); markDirty('logs', l); } }); }
+function savePlaceDay(d, pl) {
+  if (!requireWho()) return;
+  voidPlaceLogs(d); var ts = nowStr();
+  var row = { id: uid('l_'), at: d + ' 00:00:00', kind: 'place', value: null, text_value: pl.name, memo: pl.lat + ',' + pl.lon, deleted: false, created_by: who, updated_by: who, created_at: ts, updated_at: ts };
+  data.logs.push(row); markDirty('logs', row); closeSheet(); toast('この日の場所を変更しました');
+}
+
+/* ================= 描画：カレンダー ================= */
+function addMonths(m, n) { var d = new Date(+m.slice(0, 4), +m.slice(5, 7) - 1 + n, 1); return d.getFullYear() + '/' + pad(d.getMonth() + 1); }
+function gotoTab(t) { if (t === 'cal' && ui.tab !== 'cal') ui.cal = ui.date.slice(0, 7); ui.tab = t; render(false); }
+function viewCal() {
+  var m = ui.cal, y = +m.slice(0, 4), mo = +m.slice(5, 7), dim = new Date(y, mo, 0).getDate(), lead = new Date(y, mo - 1, 1).getDay(), pre = m + '/';
+  var info = {}; function g(d) { return info[d] || (info[d] = { meal: 0, walk: 0, poop: 0, note: 0, ph: 0, visit: 0, next: 0 }); }
+  var walkMin = 0;
+  liveLogs().forEach(function (l) {
+    var d = String(l.at).slice(0, 10); if (d.indexOf(pre) !== 0) return; var o = g(d);
+    if (l.kind === 'meal') o.meal++; else if (l.kind === 'walk') { o.walk++; walkMin += Number(l.value) || 0; } else if (l.kind === 'poop') o.poop++; else if (l.kind === 'note') o.note++; else if (l.kind === 'weather' && l.text_value) o.man = l.text_value;
+  });
+  var photoN = 0, visitN = 0, visitCost = 0;
+  data.photos.forEach(function (p) { if (!p.deleted && String(p.taken_on).indexOf(pre) === 0) { g(p.taken_on).ph++; photoN++; } });
+  data.visits.forEach(function (v) {
+    if (v.deleted) return;
+    if (String(v.visit_date).indexOf(pre) === 0) { g(v.visit_date).visit++; visitN++; visitCost += Number(v.cost) || 0; }
+    if (v.next_visit && String(v.next_visit).indexOf(pre) === 0) g(v.next_visit).next++;
+  });
+  var recDays = Object.keys(info).filter(function (d) { var o = info[d]; return o.meal || o.walk || o.poop || o.note || o.ph || o.visit; }).length;
+  var t0 = today(), h = '';
+  h += '<div class="datebar"><button class="iconbtn" data-act="calMonth" data-n="-1" aria-label="前の月">◀</button><div class="d">' + y + '年' + mo + '月</div><button class="iconbtn" data-act="calMonth" data-n="1" aria-label="次の月">▶</button></div>';
+  if (m !== t0.slice(0, 7)) h += '<div style="text-align:center;margin:-4px 0 10px"><button class="btn sec" data-act="calThisMonth">今月にもどる</button></div>';
+  h += '<div class="card"><div class="chips"><span class="chip">記録あり ' + recDays + '日</span><span class="chip">🐾 ' + num(walkMin) + '分</span><span class="chip">📷 ' + photoN + '枚</span><span class="chip">🏥 ' + visitN + '回' + (visitCost ? ' / ¥' + Math.round(visitCost).toLocaleString('ja-JP') : '') + '</span></div></div>';
+  h += '<div class="card"><div class="cal-h">' + WD.map(function (w, i) { return '<div style="' + (i === 0 ? 'color:var(--err)' : i === 6 ? 'color:#3b6fd6' : '') + '">' + w + '</div>'; }).join('') + '</div><div class="cal">';
+  for (var i = 0; i < lead; i++) h += '<div class="cd blank"></div>';
+  for (var d = 1; d <= dim; d++) {
+    var ds = pre + pad(d), o = info[ds] || {}, wd = (lead + d - 1) % 7, ic = '';
+    if (o.meal) ic += '🍚'; if (o.walk) ic += '🐾'; if (o.poop) ic += '💩'; if (o.note) ic += '📝'; if (o.ph) ic += '📷'; if (o.visit) ic += '🏥'; if (o.next) ic += '📅';
+    var has = o.meal || o.walk || o.poop || o.note || o.ph || o.visit, we = wxGet(ds), wxs = '';
+    if (o.man || we) wxs = (o.man ? (MAN_ICON[o.man] || '') : wxIcon(we.c)) + (we && we.hi != null ? Math.round(we.hi) + '°' : '');
+    h += '<button class="cd' + (has ? ' has' : '') + (ds === t0 ? ' tdy' : '') + (wd === 0 ? ' sun' : wd === 6 ? ' sat' : '') + '" data-act="calDay" data-d="' + ds + '" aria-label="' + ds + '"><span class="n">' + d + '</span><span class="ic">' + ic + '</span><span class="wx">' + wxs + '</span></button>';
+  }
+  h += '</div><div class="hint" style="margin-top:10px">日付をタップすると、その日の入力画面が開きます。　🍚ごはん 🐾散歩 💩うんち 📝所見 📷写真 🏥通院 📅次回の予約　天気：<a href="https://open-meteo.com/" target="_blank" rel="noopener" style="color:inherit">Open-Meteo.com</a></div></div>';
+  return h;
 }
 
 /* ================= 描画：今日 ================= */
 function viewToday() {
   var d = ui.date, logs = dayLogs(d), h = '';
+  h += '<div style="margin-bottom:8px"><button class="btn sec" style="min-height:38px" data-act="tab" data-tab="cal">🗓️ カレンダーにもどる</button></div>';
   h += '<div class="datebar"><button class="iconbtn" data-act="day" data-n="-1" aria-label="前の日">◀</button><div class="d">' + esc(dateLabel(d)) + '</div><button class="iconbtn" data-act="day" data-n="1" aria-label="次の日">▶</button></div>';
   if (d !== today()) h += '<div style="text-align:center;margin:-4px 0 10px"><button class="btn sec" data-act="goToday">今日にもどる</button></div>';
+  h += wxCard(d);
   if (!syncCfg) h += '<div class="card" style="background:#fff8e6;border-color:#f1dca3"><b>いまは、この端末だけに保存されています。</b><div class="hint" style="margin-top:4px">家族で共有するには、設定でクラウド同期（URLとキー）を入力してください。<br><button class="btn sec" style="margin-top:8px" data-act="tab" data-tab="settings">設定を開く</button></div></div>';
   var meal = sumVal(logs, 'meal'), walk = sumVal(logs, 'walk'), poopN = logs.filter(function (l) { return l.kind === 'poop'; }).length, poopG = sumVal(logs, 'poop');
   var ws = logs.filter(function (l) { return l.kind === 'weight'; }), wl = ws.length ? ws[ws.length - 1].value : null;
@@ -398,7 +566,7 @@ function viewToday() {
   else h += '<ul class="tl">' + logs.map(function (l) {
     var by = l.updated_by || l.created_by;
     return '<li data-act="edit" data-id="' + esc(l.id) + '" style="cursor:pointer"><div class="t">' + esc(l.at.slice(11, 16)) + '</div><div class="b"><div>' + esc(describe(l)) + '</div>' +
-      ((l.memo || by) ? '<div class="m">' + esc((l.memo ? l.memo + '　' : '') + (by ? '👤' + by : '')) + '</div>' : '') + '</div></li>';
+      ((l.memo || by) ? '<div class="m">' + esc((l.memo && l.kind !== 'place' ? l.memo + '　' : '') + (by ? '👤' + by : '')) + '</div>' : '') + '</div></li>';
   }).join('') + '</ul>';
   h += '</div>';
   return h;
@@ -507,6 +675,9 @@ function viewSettings() {
     '<div class="row"><button class="btn" style="flex:1" data-act="connect">接続する</button>' + (syncCfg ? '<button class="btn sec" data-act="disconnect">切断</button>' : '') + '</div>' +
     '<div class="msg ' + (syncErr ? 'err' : 'ok') + '" id="sbMsg">' + esc(syncCfg ? (syncErr ? '⚠ ' + syncErr : '接続済み' + (lastSync ? '（最終同期 ' + lastSync + '）' : '')) : '') + '</div>' +
     (syncCfg ? '<button class="btn sec block" style="margin-top:8px" data-act="sync">今すぐ同期</button>' : '') + '</div>';
+  h += '<div class="card"><h3>📍 天気の地域</h3><div class="hint" style="margin-bottom:8px">普段の地域（全員で共通）：<b>' + esc(homePlace().name) + '</b>。カレンダーと1日の画面に、天気・気温・日の出入りが出ます。旅行先は、1日の画面の「場所を変更」で、その日だけ変えられます。</div>' +
+    '<div class="row" style="margin-bottom:8px"><input id="homeQ" style="flex:1;min-height:46px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;font-size:16px;font-family:inherit" placeholder="例：足立区" autocomplete="off"><button class="btn" data-act="homeSearch">検索</button></div><div id="placeRes"></div>' +
+    '<div class="wxs" style="margin-top:8px">Weather data by <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo.com</a>（CC BY 4.0）</div></div>';
   h += '<div class="card"><h3>💾 バックアップ（CSV）</h3><div class="hint" style="margin-bottom:8px">無料プランにはバックアップがないため、ときどき保存してください。</div>' +
     '<div class="row" style="flex-wrap:wrap"><button class="btn sec" data-act="csv" data-t="logs">日々の記録</button><button class="btn sec" data-act="csv" data-t="visits">通院記録</button><button class="btn sec" data-act="csv" data-t="conditions">病気・投薬</button></div></div>';
   var tn = trashItems().length;
@@ -678,18 +849,21 @@ function exportCsv(t) {
 
 /* ================= イベント ================= */
 document.addEventListener('click', function (e) {
-  var tabBtn = e.target.closest('#tabs button'); if (tabBtn) { ui.tab = tabBtn.getAttribute('data-tab'); render(false); return; }
+  var tabBtn = e.target.closest('#tabs button'); if (tabBtn) { gotoTab(tabBtn.getAttribute('data-tab')); return; }
   var el = e.target.closest('[data-act]'); if (!el) return;
   var act = el.getAttribute('data-act'), id = el.getAttribute('data-id');
   switch (act) {
     case 'sync': sync(true); break;
-    case 'tab': ui.tab = el.getAttribute('data-tab'); render(false); break;
+    case 'tab': gotoTab(el.getAttribute('data-tab')); break;
+    case 'calDay': ui.date = el.getAttribute('data-d'); ui.tab = 'today'; render(false); break;
+    case 'calMonth': ui.cal = addMonths(ui.cal, +el.getAttribute('data-n')); render(false); break;
+    case 'calThisMonth': ui.cal = today().slice(0, 7); render(false); break;
     case 'day': ui.date = addDays(ui.date, +el.getAttribute('data-n')); render(false); break;
     case 'goToday': ui.date = today(); render(false); break;
     case 'range': ui.range = +el.getAttribute('data-n'); render(true); break;
     case 'medTab': ui.med = el.getAttribute('data-t'); render(false); break;
     case 'add': openEntry(el.getAttribute('data-kind')); break;
-    case 'edit': { var l = data.logs.find(function (x) { return x.id === id; }); if (l) openEntry(l.kind, id); break; }
+    case 'edit': { var l = data.logs.find(function (x) { return x.id === id; }); if (l) { if (l.kind === 'place') openPlace(String(l.at).slice(0, 10)); else openEntry(l.kind, id); } break; }
     case 'addVisit': openVisit(); break;
     case 'editVisit': openVisit(id); break;
     case 'addCond': openCond(); break;
@@ -701,6 +875,11 @@ document.addEventListener('click', function (e) {
     case 'voidPhoto': voidRow('photos', id, 'この写真を非表示にしますか？'); break;
     case 'addPhoto': if (requireWho()) { if (!sb) toast('写真は、設定でクラウド同期を接続してから使えます'); else $('#photoFile').click(); } break;
     case 'viewPhoto': openPhoto(id); break;
+    case 'place': openPlace(ui.date); break;
+    case 'placeSearch': placeSearch($('#placeQ').value); break;
+    case 'homeSearch': placeCtx = 'home'; placeSearch($('#homeQ').value); break;
+    case 'placePick': { var pl = pickedPlace(el.getAttribute('data-i')); if (!pl) break; if (placeCtx === 'home') { setHome(pl); toast('普段の地域を「' + pl.name + '」にしました'); render(true); } else savePlaceDay(placeCtx, pl); break; }
+    case 'placeReset': if (requireWho()) { voidPlaceLogs(placeCtx); closeSheet(); toast('普段の場所にもどしました'); } break;
     case 'trash': openTrash(); break;
     case 'restore': restoreRow(el.getAttribute('data-t'), id); break;
     case 'csv': exportCsv(el.getAttribute('data-t')); break;
@@ -708,7 +887,7 @@ document.addEventListener('click', function (e) {
       var nd = ($('#setDog').value || '').trim(), nw = ($('#setWho').value || '').trim();
       if (!nw) { toast('入力者名を入れてください'); break; }
       who = nw; lsSet(KEY.who, who);
-      if (nd !== dogName()) { data.profile = { dogName: nd }; data.profileAt = nowStr(); dirty.profile.profile = data.profileAt; saveLocal(); scheduleSync(); }
+      if (nd !== dogName()) { data.profile = Object.assign({}, data.profile, { dogName: nd }); data.profileAt = nowStr(); dirty.profile.profile = data.profileAt; saveLocal(); scheduleSync(); }
       render(true); toast('保存しました'); break;
     }
     case 'connect': {
@@ -737,7 +916,7 @@ document.addEventListener('submit', function (e) {
     var fd = new FormData(f), nw = String(fd.get('who') || '').trim(), nd = String(fd.get('dog') || '').trim();
     if (!nw) { toast('呼び名を入力してください'); return; }
     who = nw; lsSet(KEY.who, who);
-    if (nd !== dogName()) { data.profile = { dogName: nd }; data.profileAt = nowStr(); dirty.profile.profile = data.profileAt; saveLocal(); scheduleSync(); }
+    if (nd !== dogName()) { data.profile = Object.assign({}, data.profile, { dogName: nd }); data.profileAt = nowStr(); dirty.profile.profile = data.profileAt; saveLocal(); scheduleSync(); }
     closeSheet();
   }
 });
