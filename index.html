@@ -110,7 +110,8 @@ main{padding:12px 14px}
 .nrow{display:flex;gap:6px;margin-top:6px}.nrow input{flex:1}
 .ochips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
 .ochip{background:var(--pri-l);border-radius:999px;padding:5px 6px 5px 12px;font-size:14px;display:inline-flex;align-items:center;gap:4px}
-.ochip button{border:none;background:none;font-size:15px;color:var(--muted);padding:2px 6px}
+.ochip button{border:none;background:none;font-size:14px;color:var(--muted);padding:2px 5px}
+.opanel{margin:6px 0 4px;padding:8px;border:1px dashed var(--line);border-radius:12px;background:#fff}
 .hint{font-size:12px;color:var(--muted)}
 .msg{font-size:13px;margin-top:6px;min-height:18px}
 .msg.err{color:var(--err)} .msg.ok{color:var(--ok)}
@@ -181,6 +182,25 @@ function setOpts(k, list) {
   var o = Object.assign({}, (data.profile && data.profile.opts) || {}); o[k] = list;
   data.profile = Object.assign({}, data.profile, { opts: o }); data.profileAt = nowStr(); dirty.profile.profile = data.profileAt; saveLocal(); scheduleSync();
 }
+function optChips(k) {
+  var l = getOpts(k);
+  return '<div class="ochips">' + l.map(function (o, i) {
+    return '<span class="ochip">' + (i > 0 ? '<button type="button" data-act="optMove" data-key="' + k + '" data-i="' + i + '" data-n="-1" aria-label="前へ">◀</button>' : '') + '<span>' + esc(o) + '</span>' + (i < l.length - 1 ? '<button type="button" data-act="optMove" data-key="' + k + '" data-i="' + i + '" data-n="1" aria-label="後ろへ">▶</button>' : '') +
+      '<button type="button" data-act="optRen" data-key="' + k + '" data-i="' + i + '" aria-label="' + esc(o) + 'の名前を変える">✎</button><button type="button" data-act="optDel" data-key="' + k + '" data-i="' + i + '" aria-label="' + esc(o) + 'を消す">✕</button></span>';
+  }).join('') + '</div>';
+}
+function optToggle(k) { return '<button type="button" class="btn sec" style="min-height:36px;padding:4px 12px;margin-top:6px" data-act="optPanel" data-key="' + k + '">✎ リストを編集（削除・並べ替え）</button><div class="opanel" data-key="' + k + '" hidden></div>'; }
+function optDone(el, key) {
+  var fm = el.closest('form[data-form=entry]'); if (!fm) { render(true); return; }
+  var list = getOpts(key);
+  fm.querySelectorAll('select[data-optkey="' + key + '"]').forEach(function (sl) {
+    var cur = sl.value, blank = sl.options.length && sl.options[0].value === '' ? sl.options[0].textContent : null;
+    sl.innerHTML = (blank != null ? '<option value="">' + esc(blank) + '</option>' : '') + list.map(function (o) { return '<option>' + esc(o) + '</option>'; }).join('');
+    if (cur && list.indexOf(cur) < 0) { var x = document.createElement('option'); x.textContent = cur; sl.appendChild(x); }
+    sl.value = cur;
+  });
+  var pn = fm.querySelector('.opanel[data-key="' + key + '"]'); if (pn && !pn.hidden) pn.innerHTML = optChips(key);
+}
 function parseItems(t) {
   if (!t) return null; var out = [], ps = String(t).split('、');
   for (var i = 0; i < ps.length; i++) { var m = /^(.+?)\s+(\d+(?:\.\d+)?)(g|個|本|枚|粒)$/.exec(ps[i]); if (!m) return null; out.push({ n: m[1], a: Number(m[2]), u: m[3] }); }
@@ -204,7 +224,7 @@ function itemsEditor(kind, ex, o) {
   if (ex) { var ps = parseItems(ex.text_value); if (ps) items = ps; else if (!o.optional && (ex.text_value || ex.value != null)) items = [{ n: ex.text_value || KINDS[kind].label, a: ex.value == null ? '' : ex.value, u: 'g' }]; }
   return '<div class="field"><label>' + (o.label || (kind === 'snack' ? 'おやつ（選んで、量を入れる）' : '内容（選んで、量を入れる）')) + '</label><div class="items" data-key="' + kind + '">' + items.map(function (it) { return itemRow(kind, it); }).join('') + '</div>' +
     '<button type="button" class="btn sec" data-act="itAdd" data-key="' + kind + '">＋ 行を追加</button><div class="itot" id="itot" data-l="' + (o.optional ? 'プラス分の合計' : '合計') + '"></div>' +
-    '<div class="nrow"><input data-newopt="' + kind + '" placeholder="新しい項目名（例：かぼちゃ）" autocomplete="off"><button type="button" class="btn sec" data-act="optAdd" data-key="' + kind + '">リストに追加</button></div></div>';
+    '<div class="nrow"><input data-newopt="' + kind + '" placeholder="新しい項目名（例：かぼちゃ）" autocomplete="off"><button type="button" class="btn sec" data-act="optAdd" data-key="' + kind + '">リストに追加</button></div>' + optToggle(kind) + '</div>';
 }
 function collectItems(form) {
   var items = [], bad = false;
@@ -221,7 +241,7 @@ function peeEditor(ex) {
   if (t) { var sp = t.split('・'), last = sp[sp.length - 1]; if (ao.indexOf(last) >= 0 || PEE_AMT.indexOf(last) >= 0) { a = last; sp.pop(); c = sp.join('・'); } else c = t; }
   if (c && co.indexOf(c) < 0) co.push(c); if (a && ao.indexOf(a) < 0) ao.push(a);
   function sel(nm, key, list, cur) { return '<select name="' + nm + '" data-optkey="' + key + '"><option value="">（選ばない）</option>' + list.map(function (o) { return '<option' + (o === cur ? ' selected' : '') + '>' + esc(o) + '</option>'; }).join('') + '</select>'; }
-  function add(key, ph) { return '<div class="nrow" style="margin:-4px 0 12px"><input data-newopt="' + key + '" placeholder="' + ph + '" autocomplete="off"><button type="button" class="btn sec" data-act="optAdd" data-key="' + key + '">リストに追加</button></div>'; }
+  function add(key, ph) { return '<div class="nrow" style="margin:-4px 0 12px"><input data-newopt="' + key + '" placeholder="' + ph + '" autocomplete="off"><button type="button" class="btn sec" data-act="optAdd" data-key="' + key + '">リストに追加</button></div>' + optToggle(key).replace('margin-top:6px', 'margin:-4px 0 12px'); }
   return field('色', sel('pee_c', 'peeColor', co, c)) + add('peeColor', '色を追加（例：オレンジ）') + field('量', sel('pee_a', 'peeAmt', ao, a)) + add('peeAmt', '量を追加（例：シート2枚分）');
 }
 function uid(p) { return p + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
@@ -767,7 +787,7 @@ function viewSettings() {
     '<div class="wxs" style="margin-top:8px">Weather data by <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo.com</a>（CC BY 4.0）</div></div>';
   h += '<div class="card"><h3>🧩 選択肢の管理</h3><div class="hint">ごはん・おやつ・おしっこの色の、選べる項目です（家族で共通）。消しても、過去の記録は変わりません。</div>' +
     ['meal', 'snack', 'waterExtra', 'peeColor', 'peeAmt'].map(function (k) {
-      return '<div style="margin-top:12px"><b style="font-size:14px">' + OPT_LABEL[k] + '</b><div class="ochips">' + getOpts(k).map(function (o, i) { return '<span class="ochip">' + esc(o) + '<button data-act="optRen" data-key="' + k + '" data-i="' + i + '" aria-label="' + esc(o) + 'の名前を変える">✎</button><button data-act="optDel" data-key="' + k + '" data-i="' + i + '" aria-label="' + esc(o) + 'を消す">✕</button></span>'; }).join('') + '</div>' +
+      return '<div style="margin-top:12px"><b style="font-size:14px">' + OPT_LABEL[k] + '</b>' + optChips(k) +
         '<div class="nrow"><input id="optQ_' + k + '" data-newopt-s="' + k + '" placeholder="追加する項目" autocomplete="off"><button class="btn sec" data-act="optAddS" data-key="' + k + '">追加</button></div></div>';
     }).join('') + '</div>';
   h += '<div class="card"><h3>💾 バックアップ（CSV）</h3><div class="hint" style="margin-bottom:8px">無料プランにはバックアップがないため、ときどき保存してください。</div>' +
@@ -988,7 +1008,7 @@ document.addEventListener('click', function (e) {
       if (!v) { toast('追加する名前を入力してください'); break; }
       var lst = getOpts(key); if (lst.indexOf(v) >= 0) { toast('もうリストにあります'); }
       else { lst.push(v); setOpts(key, lst); toast('「' + v + '」を追加しました'); fm.querySelectorAll('select[data-optkey="' + key + '"]').forEach(function (sl) { var o = document.createElement('option'); o.textContent = v; sl.appendChild(o); }); }
-      inp.value = '';
+      inp.value = ''; optDone(el, key);
       if (key === 'peeColor') { fm.querySelector('[name=pee_c]').value = v; }
       else if (key === 'peeAmt') { fm.querySelector('[name=pee_a]').value = v; }
       else { var rows = fm.querySelectorAll('.irow'), lr = rows[rows.length - 1];
@@ -996,10 +1016,12 @@ document.addEventListener('click', function (e) {
         else { fm.querySelector('.items').insertAdjacentHTML('beforeend', itemRow(key, { n: v, a: '', u: 'g' })); } }
       break; }
     case 'optAddS': { var ks = el.getAttribute('data-key'), vi = String($('#optQ_' + ks).value || '').trim(); if (!vi) break; var ls = getOpts(ks); if (ls.indexOf(vi) >= 0) { toast('もうリストにあります'); break; } ls.push(vi); setOpts(ks, ls); render(true); toast('追加しました'); break; }
-    case 'optRen': { var kr = el.getAttribute('data-key'), ir = +el.getAttribute('data-i'), lr = getOpts(kr), nv = prompt('新しい名前にします（過去の記録は、そのまま残ります）', lr[ir]); nv = String(nv || '').trim(); if (!nv || nv === lr[ir]) break; if (lr.indexOf(nv) >= 0) { toast('同じ名前がもうあります'); break; } lr[ir] = nv; setOpts(kr, lr); render(true); toast('名前を変えました'); break; }
+    case 'optRen': { var kr = el.getAttribute('data-key'), ir = +el.getAttribute('data-i'), lr = getOpts(kr), nv = prompt('新しい名前にします（過去の記録は、そのまま残ります）', lr[ir]); nv = String(nv || '').trim(); if (!nv || nv === lr[ir]) break; if (lr.indexOf(nv) >= 0) { toast('同じ名前がもうあります'); break; } lr[ir] = nv; setOpts(kr, lr); optDone(el, kr); toast('名前を変えました'); break; }
+    case 'optMove': { var km = el.getAttribute('data-key'), lm = getOpts(km), im = +el.getAttribute('data-i'), jm = im + (+el.getAttribute('data-n')); if (jm < 0 || jm >= lm.length) break; var tm = lm[im]; lm[im] = lm[jm]; lm[jm] = tm; setOpts(km, lm); optDone(el, km); break; }
+    case 'optPanel': { var pn = el.parentNode.querySelector('.opanel[data-key="' + el.getAttribute('data-key') + '"]'); if (pn.hidden) { pn.innerHTML = optChips(el.getAttribute('data-key')); pn.hidden = false; el.textContent = '▲ リストの編集をとじる'; } else { pn.hidden = true; el.textContent = '✎ リストを編集（削除・並べ替え）'; } break; }
     case 'qedit': ui.qedit = !ui.qedit; render(true); break;
     case 'qmove': { var ko = quickOrder(), i0 = ko.indexOf(el.getAttribute('data-k')), j0 = i0 + (+el.getAttribute('data-n')); if (j0 < 0 || j0 >= ko.length) break; var tmp = ko[i0]; ko[i0] = ko[j0]; ko[j0] = tmp; setQOrder(ko); render(true); break; }
-    case 'optDel': { var kd = el.getAttribute('data-key'), ld = getOpts(kd); if (ld.length <= 1) { toast('最後のひとつは消せません'); break; } ld.splice(+el.getAttribute('data-i'), 1); setOpts(kd, ld); render(true); break; }
+    case 'optDel': { var kd = el.getAttribute('data-key'), ld = getOpts(kd); if (ld.length <= 1) { toast('最後のひとつは消せません'); break; } ld.splice(+el.getAttribute('data-i'), 1); setOpts(kd, ld); optDone(el, kd); break; }
     case 'restore': restoreRow(el.getAttribute('data-t'), id); break;
     case 'csv': exportCsv(el.getAttribute('data-t')); break;
     case 'saveBasic': {
