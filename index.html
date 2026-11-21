@@ -320,6 +320,12 @@ var KINDS = {
 };
 function quickOrder() { var o = (data.profile && data.profile.qorder) || [], r = o.filter(function (k) { return QUICK.indexOf(k) >= 0; }); QUICK.forEach(function (k) { if (r.indexOf(k) < 0) r.push(k); }); return r; }
 function setQOrder(arr) { data.profile = Object.assign({}, data.profile, { qorder: arr }); data.profileAt = nowStr(); dirty.profile.profile = data.profileAt; saveLocal(); scheduleSync(); }
+var DEFLAB = {}; Object.keys(KINDS).forEach(function (k) { DEFLAB[k] = KINDS[k].label; });
+function applyLabels() {
+  var kl = (data.profile && data.profile.klabels) || {};
+  Object.keys(KINDS).forEach(function (k) { KINDS[k].label = kl[k] || DEFLAB[k]; });
+  KINDS.water.valueLabel = KINDS.water.label + ' (g)'; KINDS.weight.valueLabel = KINDS.weight.label + ' (g)';
+}
 var QUICK = ['meal', 'snack', 'walk', 'poop', 'pee', 'weight', 'water', 'medicine', 'weather', 'note'];
 
 /* ================= 取得ヘルパー ================= */
@@ -335,13 +341,13 @@ function describe(l) {
     if (its) { parts.push(K.label + '：' + l.text_value); if (its.filter(function (x) { return x.u === 'g'; }).length > 1 && l.value != null) parts.push('（計' + num(l.value) + 'g）'); }
     else { parts.push(l.text_value || K.label); if (l.value != null) parts.push(num(l.value) + 'g'); }
   }
-  else if (l.kind === 'walk') { parts.push('散歩 ' + num(l.value) + '分'); if (l.text_value) parts.push('（' + l.text_value + '）'); }
-  else if (l.kind === 'poop') { parts.push('うんち'); if (l.value != null) parts.push(num(l.value) + 'g'); if (l.text_value) parts.push('（' + l.text_value + '）'); }
-  else if (l.kind === 'medicine') { var sm = splitMed(l.text_value); parts.push('お薬：' + sm.n + (sm.d ? '（' + sm.d + '）' : '')); }
-  else if (l.kind === 'pee') { parts.push('おしっこ'); if (l.text_value) parts.push('（' + l.text_value + '）'); }
-  else if (l.kind === 'weight') { parts.push('体重 ' + num(l.value) + 'g'); if (l.text_value) parts.push('（' + l.text_value + '）'); }
-  else if (l.kind === 'water') { parts.push('水分 ' + num(l.value) + 'g'); if (l.text_value) parts.push('＋ ' + l.text_value); }
-  else if (l.kind === 'weather') { parts.push('天気：' + l.text_value); }
+  else if (l.kind === 'walk') { parts.push(K.label + ' ' + num(l.value) + '分'); if (l.text_value) parts.push('（' + l.text_value + '）'); }
+  else if (l.kind === 'poop') { parts.push(K.label); if (l.value != null) parts.push(num(l.value) + 'g'); if (l.text_value) parts.push('（' + l.text_value + '）'); }
+  else if (l.kind === 'medicine') { var sm = splitMed(l.text_value); parts.push(K.label + '：' + sm.n + (sm.d ? '（' + sm.d + '）' : '')); }
+  else if (l.kind === 'pee') { parts.push(K.label); if (l.text_value) parts.push('（' + l.text_value + '）'); }
+  else if (l.kind === 'weight') { parts.push(K.label + ' ' + num(l.value) + 'g'); if (l.text_value) parts.push('（' + l.text_value + '）'); }
+  else if (l.kind === 'water') { parts.push(K.label + ' ' + num(l.value) + 'g'); if (l.text_value) parts.push('＋ ' + l.text_value); }
+  else if (l.kind === 'weather') { parts.push(K.label + '：' + l.text_value); }
   else if (l.kind === 'note') { parts.push(l.text_value); }
   else if (l.kind === 'place') { parts.push('この日の場所：' + (l.text_value || '')); }
   else { parts.push(K.label); }
@@ -500,6 +506,7 @@ async function uploadPhotos(files) {
 
 /* ================= 描画：共通 ================= */
 function render(keep) {
+  applyLabels();
   var y = keep ? window.scrollY : 0;
   var v = $('#view');
   if (ui.tab === 'cal') v.innerHTML = viewCal();
@@ -675,10 +682,10 @@ function viewToday() {
     '<span class="chip">🍚 ' + num(meal) + 'g</span>' + (snackG ? '<span class="chip">🦴 ' + num(snackG) + 'g</span>' : '') + '<span class="chip">🐾 ' + num(walk) + '分</span>' +
     '<span class="chip">💩 ' + poopN + '回' + (poopG ? ' / ' + num(poopG) + 'g' : '') + '</span>' +
     '<span class="chip">⚖️ ' + (wl != null ? num(wl) + 'g' : '—') + '</span></div></div>';
-  h += '<div class="card"><div class="qhead"><h3>記録する</h3><button class="btn sec" style="min-height:34px;padding:4px 12px" data-act="qedit">' + (ui.qedit ? '完了' : '↕ 並べ替え') + '</button></div><div class="grid4" id="qgrid">' + quickOrder().map(function (k) {
-    if (ui.qedit) return '<div class="qbtn qt" data-k="' + k + '"><span class="i">' + KINDS[k].icon + '</span>' + KINDS[k].label + '<span class="qa"><button data-act="qmove" data-k="' + k + '" data-n="-1" aria-label="前へ">◀</button><button data-act="qmove" data-k="' + k + '" data-n="1" aria-label="後ろへ">▶</button></span></div>';
-    return '<button class="qbtn" data-act="add" data-kind="' + k + '"><span class="i">' + KINDS[k].icon + '</span>' + KINDS[k].label + '</button>';
-  }).join('') + '</div>' + (ui.qedit ? '<div class="hint" style="margin-top:8px">ボタンをドラッグして入れ替えできます（◀▶でも動かせます）。終わったら「完了」を押してください。</div>' : '') + '</div>';
+  h += '<div class="card"><div class="qhead"><h3>記録する</h3><button class="btn sec" style="min-height:34px;padding:4px 12px" data-act="qedit">' + (ui.qedit ? '完了' : '↕ 並べ替え・名前') + '</button></div><div class="grid4" id="qgrid">' + quickOrder().map(function (k) {
+    if (ui.qedit) return '<div class="qbtn qt" data-k="' + k + '"><span class="i">' + KINDS[k].icon + '</span>' + esc(KINDS[k].label) + '<span class="qa"><button data-act="qmove" data-k="' + k + '" data-n="-1" aria-label="前へ">◀</button><button data-act="qren" data-k="' + k + '" aria-label="名前を変える">✎</button><button data-act="qmove" data-k="' + k + '" data-n="1" aria-label="後ろへ">▶</button></span></div>';
+    return '<button class="qbtn" data-act="add" data-kind="' + k + '"><span class="i">' + KINDS[k].icon + '</span>' + esc(KINDS[k].label) + '</button>';
+  }).join('') + '</div>' + (ui.qedit ? '<div class="hint" style="margin-top:8px">ボタンをドラッグして入れ替えできます（◀▶でも動かせます）。✎で名前を変えられます（空にすると元の名前にもどります）。終わったら「完了」を押してください。</div>' : '') + '</div>';
   var phs = data.photos.filter(function (p) { return !p.deleted && p.taken_on === d; });
   h += '<div class="card"><h3>この日の写真</h3><div class="photos">' + phs.map(function (p) { return '<button class="ph" data-act="viewPhoto" data-id="' + esc(p.id) + '"><img data-path="' + esc(p.path) + '" alt="写真"></button>'; }).join('') +
     '<button class="ph add" data-act="addPhoto"><span class="i">📷</span>写真を追加</button></div></div>';
@@ -740,15 +747,15 @@ function viewGraph() {
   }
   var w = daily('weight', 'last'), wv = w.filter(function (p) { return p.v != null; });
   var h = '<div class="range">' + [7, 30, 90].map(function (n) { return '<button class="' + (ui.range === n ? 'on' : '') + '" data-act="range" data-n="' + n + '">' + n + '日</button>'; }).join('') + '</div>';
-  h += '<div class="card"><h3>⚖️ 体重</h3>' + chartSvg('line', w, { label: '体重', color: 'var(--chart1)', fmt: function (v) { return v >= 1000 ? (v / 1000).toFixed(2) + 'kg' : Math.round(v) + 'g'; } });
+  h += '<div class="card"><h3>⚖️ ' + esc(KINDS.weight.label) + '</h3>' + chartSvg('line', w, { label: KINDS.weight.label, color: 'var(--chart1)', fmt: function (v) { return v >= 1000 ? (v / 1000).toFixed(2) + 'kg' : Math.round(v) + 'g'; } });
   if (wv.length) {
     var last = wv[wv.length - 1], prev = wv.length > 1 ? wv[wv.length - 2] : null, mx = Math.max.apply(null, wv.map(function (p) { return p.v; })), mn = Math.min.apply(null, wv.map(function (p) { return p.v; }));
     h += '<div class="kv"><span>最新（' + esc(last.d.slice(5)) + '）</span><span><b>' + num(last.v) + 'g</b>' + (prev ? '　前回比 ' + (last.v - prev.v >= 0 ? '+' : '') + num(last.v - prev.v) + 'g' : '') + '</span></div><div class="kv"><span>期間の最大 / 最小</span><span>' + num(mx) + 'g / ' + num(mn) + 'g</span></div>';
   }
   h += '</div>';
-  h += '<div class="card"><h3>🍚 ごはん（1日の合計 g）</h3>' + chartSvg('bar', daily('meal', 'sum'), { label: 'ごはん', color: 'var(--chart2)' }) + '</div>';
-  h += '<div class="card"><h3>🐾 散歩（1日の合計 分）</h3>' + chartSvg('bar', daily('walk', 'sum'), { label: '散歩', color: 'var(--chart3)' }) + '</div>';
-  h += '<div class="card"><h3>💩 うんち（1日の合計 g）</h3>' + chartSvg('bar', daily('poop', 'sum'), { label: 'うんち', color: 'var(--chart4)' }) + '</div>';
+  h += '<div class="card"><h3>🍚 ' + esc(KINDS.meal.label) + '（1日の合計 g）</h3>' + chartSvg('bar', daily('meal', 'sum'), { label: KINDS.meal.label, color: 'var(--chart2)' }) + '</div>';
+  h += '<div class="card"><h3>🐾 ' + esc(KINDS.walk.label) + '（1日の合計 分）</h3>' + chartSvg('bar', daily('walk', 'sum'), { label: KINDS.walk.label, color: 'var(--chart3)' }) + '</div>';
+  h += '<div class="card"><h3>💩 ' + esc(KINDS.poop.label) + '（1日の合計 g）</h3>' + chartSvg('bar', daily('poop', 'sum'), { label: KINDS.poop.label, color: 'var(--chart4)' }) + '</div>';
   return h;
 }
 
@@ -1039,6 +1046,11 @@ document.addEventListener('click', function (e) {
     case 'optMove': { var km = el.getAttribute('data-key'), lm = getOpts(km), im = +el.getAttribute('data-i'), jm = im + (+el.getAttribute('data-n')); if (jm < 0 || jm >= lm.length) break; var tm = lm[im]; lm[im] = lm[jm]; lm[jm] = tm; setOpts(km, lm); optDone(el, km); break; }
     case 'optPanel': { var pn = el.parentNode.querySelector('.opanel[data-key="' + el.getAttribute('data-key') + '"]'); if (pn.hidden) { pn.innerHTML = optChips(el.getAttribute('data-key')); pn.hidden = false; el.textContent = '▲ リストの編集をとじる'; } else { pn.hidden = true; el.textContent = '✎ リストを編集（削除・並べ替え）'; } break; }
     case 'qedit': ui.qedit = !ui.qedit; render(true); break;
+    case 'qren': {
+      var kq = el.getAttribute('data-k'), nq = prompt('「' + DEFLAB[kq] + '」の表示名を変えます（空にすると元の名前にもどります）', KINDS[kq].label);
+      if (nq === null) break; nq = String(nq).trim().slice(0, 12);
+      var kls = Object.assign({}, (data.profile && data.profile.klabels) || {}); if (nq && nq !== DEFLAB[kq]) kls[kq] = nq; else delete kls[kq];
+      data.profile = Object.assign({}, data.profile, { klabels: kls }); data.profileAt = nowStr(); dirty.profile.profile = data.profileAt; saveLocal(); scheduleSync(); render(true); toast(nq ? '名前を変えました' : '元の名前にもどしました'); break; }
     case 'qmove': { var ko = quickOrder(), i0 = ko.indexOf(el.getAttribute('data-k')), j0 = i0 + (+el.getAttribute('data-n')); if (j0 < 0 || j0 >= ko.length) break; var tmp = ko[i0]; ko[i0] = ko[j0]; ko[j0] = tmp; setQOrder(ko); render(true); break; }
     case 'optDel': { var kd = el.getAttribute('data-key'), ld = getOpts(kd); if (ld.length <= 1 && EMPTY_OK.indexOf(kd) < 0) { toast('最後のひとつは消せません'); break; } ld.splice(+el.getAttribute('data-i'), 1); setOpts(kd, ld); optDone(el, kd); break; }
     case 'restore': restoreRow(el.getAttribute('data-t'), id); break;
