@@ -32,9 +32,14 @@ main{padding:12px 14px}
 .card h3{margin:0 0 8px;font-size:15px}
  .cal-h{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;font-size:12px;color:var(--muted);margin-bottom:4px}
 .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
-.cd{min-height:78px;border:1px solid var(--line);background:#fff;border-radius:10px;padding:4px 1px 2px;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:13px;color:var(--text);font-family:inherit}
+.cd{min-height:104px;border:1px solid var(--line);background:#fff;border-radius:10px;padding:4px 1px 2px;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:13px;color:var(--text);font-family:inherit}
 .cd.has{background:var(--pri-l)} .cd.tdy{outline:2px solid var(--pri);outline-offset:-1px}
-.cd .wx{font-size:10px;line-height:1.2;color:var(--muted);white-space:nowrap}
+.cd .wx{font-size:19px;line-height:1.1}
+.cd .tp{font-size:11px;line-height:1.2;font-weight:700;white-space:nowrap;letter-spacing:-.3px}
+.cd .tp .h{color:#d6452f} .cd .tp .l{color:#3b6fd6}
+.cd .sn{font-size:10px;line-height:1.15;color:var(--muted);white-space:nowrap;letter-spacing:-.4px}
+.cd .mk{position:absolute;top:4px;right:4px;width:9px;height:9px;border-radius:50%;background:var(--pri)}
+.cd{position:relative}
 .wxc{display:flex;align-items:center;gap:10px}
 .wxc .big{font-size:34px;line-height:1}
 .wxs{font-size:12px;color:var(--muted)}
@@ -535,11 +540,13 @@ function viewCal() {
   for (var d = 1; d <= dim; d++) {
     var ds = pre + pad(d), o = info[ds] || {}, wd = (lead + d - 1) % 7, ic = '';
     if (o.meal) ic += '🍚'; if (o.walk) ic += '🐾'; if (o.poop) ic += '💩'; if (o.note) ic += '📝'; if (o.ph) ic += '📷'; if (o.visit) ic += '🏥'; if (o.next) ic += '📅';
-    var has = o.meal || o.walk || o.poop || o.note || o.ph || o.visit, we = wxGet(ds), wxs = '';
-    if (o.man || we) wxs = (o.man ? (MAN_ICON[o.man] || '') : wxIcon(we.c)) + (we && we.hi != null ? Math.round(we.hi) + '°' : '');
-    h += '<button class="cd' + (has ? ' has' : '') + (ds === t0 ? ' tdy' : '') + (wd === 0 ? ' sun' : wd === 6 ? ' sat' : '') + '" data-act="calDay" data-d="' + ds + '" aria-label="' + ds + '"><span class="n">' + d + '</span><span class="ic">' + ic + '</span><span class="wx">' + wxs + '</span></button>';
+    var has = o.meal || o.walk || o.poop || o.note || o.ph || o.visit, we = wxGet(ds), ico = '', tp = '', sn = '';
+    if (o.man || we) ico = o.man ? (MAN_ICON[o.man] || '') : wxIcon(we.c);
+    if (we && we.hi != null) tp = '<span class="h">' + Math.round(we.hi) + '°</span>/<span class="l">' + (we.lo != null ? Math.round(we.lo) + '°' : '–') + '</span>';
+    if (we && we.sr) sn = '↑' + we.sr + '<br>↓' + we.ss;
+    h += '<button class="cd' + (has ? ' has' : '') + (ds === t0 ? ' tdy' : '') + (wd === 0 ? ' sun' : wd === 6 ? ' sat' : '') + '" data-act="calDay" data-d="' + ds + '" aria-label="' + ds + (has ? ' 記録あり' : '') + '"><span class="n">' + d + '</span>' + (has ? '<span class="mk"></span>' : '') + '<span class="wx">' + ico + '</span><span class="tp">' + tp + '</span><span class="sn">' + sn + '</span></button>';
   }
-  h += '</div><div class="hint" style="margin-top:10px">日付をタップすると、その日の入力画面が開きます。　🍚ごはん 🐾散歩 💩うんち 📝所見 📷写真 🏥通院 📅次回の予約　天気：<a href="https://open-meteo.com/" target="_blank" rel="noopener" style="color:inherit">Open-Meteo.com</a></div></div>';
+  h += '</div><div class="hint" style="margin-top:10px">日付をタップすると、その日の入力画面が開きます。　<span style="color:var(--pri)">●</span> は記録のある日　<span style="color:#d6452f">赤</span>＝最高 / <span style="color:#3b6fd6">青</span>＝最低気温　↑日の出 ↓日の入り　天気：<a href="https://open-meteo.com/" target="_blank" rel="noopener" style="color:inherit">Open-Meteo.com</a></div></div>';
   return h;
 }
 
