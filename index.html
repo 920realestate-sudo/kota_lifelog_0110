@@ -53,7 +53,9 @@ main{padding:12px 14px}
 .datebar .d{font-size:18px;font-weight:700;text-align:center;flex:1}
 .iconbtn{width:44px;height:44px;border:1px solid var(--line);background:#fff;border-radius:12px;font-size:18px;color:var(--text)}
 .chips{display:flex;flex-wrap:wrap;gap:8px}
-.chip{background:var(--pri-l);border-radius:999px;padding:5px 12px;font-size:14px}
+.chip{background:var(--pri-l);border-radius:999px;padding:5px 12px;font-size:14px;border:none;font-family:inherit;color:inherit;cursor:pointer}
+.chip:active{opacity:.6}
+.tl li{border-radius:8px;transition:background .3s}.tl li.flash{background:#fff3d6}.tl li.flashcur{background:#ffdf99}
 .chip.s{font-size:12px;padding:2px 9px}
 .chip.ok{background:#e0f4f1;color:#1f7a6e} .chip.warn{background:#fdf0cf;color:#8a6208} .chip.mute{background:#f0ebe5;color:var(--muted)}
 .grid4{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
@@ -681,16 +683,17 @@ function viewToday() {
   function cg(n, g) { return n + '回' + (g ? ' / ' + num(g) + 'g' : ''); }
   function cnt(k) { return logs.filter(function (l) { return l.kind === k; }).length; }
   var mealN = cnt('meal'), snackN = cnt('snack'), peeN = cnt('pee'), waterN = cnt('water'), waterG = sumVal(logs, 'water'), medN = cnt('medicine'), noteN = cnt('note');
+  function chip(k, txt) { return '<button class="chip" data-act="jump" data-k="' + k + '" aria-label="' + esc(KINDS[k].label) + 'の記録へ移動">' + KINDS[k].icon + ' ' + txt + '</button>'; }
   h += '<div class="card"><div class="chips">' +
-    '<span class="chip">' + KINDS.meal.icon + ' ' + cg(mealN, meal) + '</span>' +
-    (snackN ? '<span class="chip">' + KINDS.snack.icon + ' ' + cg(snackN, snackG) + '</span>' : '') +
-    '<span class="chip">' + KINDS.walk.icon + ' ' + num(walk) + '分</span>' +
-    '<span class="chip">' + KINDS.poop.icon + ' ' + poopN + '回' + (poopG ? ' / ' + num(poopG) + 'g' : '') + '</span>' +
-    (peeN ? '<span class="chip">' + KINDS.pee.icon + ' ' + peeN + '回</span>' : '') +
-    (waterN ? '<span class="chip">' + KINDS.water.icon + ' ' + cg(waterN, waterG) + '</span>' : '') +
-    (medN ? '<span class="chip">' + KINDS.medicine.icon + ' ' + medN + '回</span>' : '') +
-    (noteN ? '<span class="chip">' + KINDS.note.icon + ' ' + noteN + '件</span>' : '') +
-    '<span class="chip">' + KINDS.weight.icon + ' ' + (wl != null ? num(wl) + 'g' : '—') + '</span></div></div>';
+    chip('meal', cg(mealN, meal)) +
+    (snackN ? chip('snack', cg(snackN, snackG)) : '') +
+    chip('walk', num(walk) + '分') +
+    chip('poop', poopN + '回' + (poopG ? ' / ' + num(poopG) + 'g' : '')) +
+    (peeN ? chip('pee', peeN + '回') : '') +
+    (waterN ? chip('water', cg(waterN, waterG)) : '') +
+    (medN ? chip('medicine', medN + '回') : '') +
+    (noteN ? chip('note', noteN + '件') : '') +
+    chip('weight', wl != null ? num(wl) + 'g' : '—') + '</div></div>';
   h += '<div class="card"><div class="qhead"><h3>記録する</h3><button class="btn sec" style="min-height:34px;padding:4px 12px" data-act="qedit">' + (ui.qedit ? '完了' : '↕ 並べ替え・名前') + '</button></div><div class="grid4" id="qgrid">' + quickOrder().map(function (k) {
     if (ui.qedit) return '<div class="qbtn qt" data-k="' + k + '"><span class="i">' + KINDS[k].icon + '</span>' + esc(KINDS[k].label) + '<span class="qa"><button data-act="qmove" data-k="' + k + '" data-n="-1" aria-label="前へ">◀</button><button data-act="qren" data-k="' + k + '" aria-label="名前を変える">✎</button><button data-act="qmove" data-k="' + k + '" data-n="1" aria-label="後ろへ">▶</button></span></div>';
     return '<button class="qbtn" data-act="add" data-kind="' + k + '"><span class="i">' + KINDS[k].icon + '</span>' + esc(KINDS[k].label) + '</button>';
@@ -702,7 +705,7 @@ function viewToday() {
   if (!logs.length) h += '<div class="empty">まだ記録がありません。上のボタンから追加できます。</div>';
   else h += '<ul class="tl">' + logs.map(function (l) {
     var by = l.updated_by || l.created_by;
-    return '<li data-act="edit" data-id="' + esc(l.id) + '" style="cursor:pointer"><div class="t">' + esc(l.at.slice(11, 16)) + '</div><div class="b"><div>' + esc(describe(l)) + '</div>' +
+    return '<li data-act="edit" data-id="' + esc(l.id) + '" data-kind="' + esc(l.kind) + '" style="cursor:pointer"><div class="t">' + esc(l.at.slice(11, 16)) + '</div><div class="b"><div>' + esc(describe(l)) + '</div>' +
       ((l.memo || by) ? '<div class="m">' + esc((l.memo && l.kind !== 'place' ? l.memo + '　' : '') + (by ? '👤' + by : '')) + '</div>' : '') + '</div></li>';
   }).join('') + '</ul>';
   h += '</div>';
@@ -1054,6 +1057,15 @@ document.addEventListener('click', function (e) {
     case 'optRen': { var kr = el.getAttribute('data-key'), ir = +el.getAttribute('data-i'), lr = getOpts(kr), nv = prompt('新しい名前にします（過去の記録は、そのまま残ります）', lr[ir]); nv = String(nv || '').trim(); if (!nv || nv === lr[ir]) break; if (lr.indexOf(nv) >= 0) { toast('同じ名前がもうあります'); break; } lr[ir] = nv; setOpts(kr, lr); optDone(el, kr); toast('名前を変えました'); break; }
     case 'optMove': { var km = el.getAttribute('data-key'), lm = getOpts(km), im = +el.getAttribute('data-i'), jm = im + (+el.getAttribute('data-n')); if (jm < 0 || jm >= lm.length) break; var tm = lm[im]; lm[im] = lm[jm]; lm[jm] = tm; setOpts(km, lm); optDone(el, km); break; }
     case 'optPanel': { var pn = el.parentNode.querySelector('.opanel[data-key="' + el.getAttribute('data-key') + '"]'); if (pn.hidden) { pn.innerHTML = optChips(el.getAttribute('data-key')); pn.hidden = false; el.textContent = '▲ リストの編集をとじる'; } else { pn.hidden = true; el.textContent = '✎ リストを編集（削除・並べ替え）'; } break; }
+    case 'jump': {
+      var kj = el.getAttribute('data-k'), lj = [].slice.call(document.querySelectorAll('.tl li[data-kind="' + kj + '"]'));
+      if (!lj.length) { toast('この日の「' + KINDS[kj].label + '」の記録は、まだありません'); break; }
+      if (kj === 'weight') lj.reverse();
+      var ij = ui.jk === kj ? ((ui.ji + 1) % lj.length) : 0; ui.jk = kj; ui.ji = ij;
+      document.querySelectorAll('.tl li.flash,.tl li.flashcur').forEach(function (x) { x.classList.remove('flash', 'flashcur'); });
+      lj.forEach(function (x) { x.classList.add('flash'); }); lj[ij].classList.add('flashcur');
+      lj[ij].scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setTimeout(function () { lj.forEach(function (x) { x.classList.remove('flash', 'flashcur'); }); }, 2600); break; }
     case 'qedit': ui.qedit = !ui.qedit; render(true); break;
     case 'qren': {
       var kq = el.getAttribute('data-k'), nq = prompt('「' + DEFLAB[kq] + '」の表示名を変えます（空にすると元の名前にもどります）', KINDS[kq].label);
