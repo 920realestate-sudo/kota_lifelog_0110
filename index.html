@@ -64,7 +64,8 @@ main{padding:12px 14px}
 .qhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}.qhead h3{margin:0}
 .qt{min-height:84px;padding-top:8px;touch-action:none;cursor:grab;position:relative;user-select:none;-webkit-user-select:none;border-style:dashed}
 .qt.drag{opacity:.85;z-index:5;box-shadow:0 6px 16px rgba(0,0,0,.25);cursor:grabbing}.qt.over{outline:2px dashed var(--pri)}
-.qa button{border:none;background:none;font-size:13px;color:var(--muted);padding:4px 8px}
+.qa{display:flex;flex-wrap:nowrap;justify-content:center;gap:0}
+.qa button{border:none;background:none;font-size:13px;color:var(--muted);padding:4px 5px}
 .qbtn:active,.btn:active,.iconbtn:active{transform:scale(.97)}
 .btn{min-height:46px;padding:0 18px;border:none;border-radius:12px;background:var(--pri);color:#fff;font-size:16px;font-weight:700}
 .btn.sec{background:#fff;color:var(--text);border:1px solid var(--line)}
@@ -176,11 +177,34 @@ function dateField(name, val, required) {
   var v = String(val || '').replace(/\//g, '-'), lab = v ? dateLabel(v.replace(/-/g, '/')) : '（未設定）';
   return '<span class="dtf"><span class="dtv"><span>' + lab + '</span><i>📅</i></span><input type="date" data-dt name="' + name + '" value="' + v + '"' + (required ? ' required' : '') + '></span>';
 }
-var APP_VER = '2026-11-21 e';
+var APP_VER = '2026-11-21 f';
 var DEFAULT_OPTS = { meal: ['ごはん', '野菜', 'お肉', 'サプリ', 'フード'], snack: ['お芋', '煮干し', 'ささみ'], peeColor: ['透明', '薄黄色', '黄色', '濃い黄色', '赤っぽい'], peeAmt: ['シート1枚分', 'シート4分の3', 'シート半分', 'シート4分の1'], waterExtra: ['お芋', '野菜', 'サプリ'], walkPace: [], weightWalk: ['散歩した', '散歩しなかった'], medType: [] };
 var OPT_LABEL = { meal: '🍚 ごはんの材料', snack: '🦴 おやつ', peeColor: '💦 おしっこの色', peeAmt: '💦 おしっこの量', waterExtra: '🥛 水分にプラスするもの', walkPace: '🐾 散歩のペース', weightWalk: '⚖️ 体重の「散歩の有無」', medType: '💊 お薬の種類' };
 var UNITS = ['g', '個', '本', '枚', '粒'], PEE_AMT = ['大', '中', '小', '極小'];
-function getOpts(k) { var o = data.profile && data.profile.opts && data.profile.opts[k]; return (o && o.length) ? o.slice() : DEFAULT_OPTS[k].slice(); }
+function getOpts(k) { var o = data.profile && data.profile.opts && data.profile.opts[k]; return (o && o.length) ? o.slice() : (DEFAULT_OPTS[k] || []).slice(); }
+var DEFAULT_CK = [{ id: 'c_tiktok', label: 'TikTok', icon: '📱', type: 'range' }];
+var CK_TYPES = { range: '時間帯（開始〜終了と、長さ）', select: 'プルダウンで選ぶ', num: '数字（回数・量など）', memo: 'メモ（文章）' };
+var CK_ICONS = ['📱', '🎥', '📷', '🎵', '🛁', '✂️', '🏃', '🩺', '🧴', '🎾', '🚗', '🌟', '❤️', '🔔', '🍖', '🧸'];
+function getCK() { var c = data.profile && data.profile.ckinds; return (c ? c : DEFAULT_CK).map(function (x) { return Object.assign({}, x); }); }
+function setCK(list) { data.profile = Object.assign({}, data.profile, { ckinds: list }); data.profileAt = nowStr(); dirty.profile.profile = data.profileAt; saveLocal(); scheduleSync(); }
+function fmtDur(m) { m = Math.round(Number(m) || 0); var h = Math.floor(m / 60), r = m % 60; return (h ? h + '時間' : '') + (r || !h ? r + '分' : ''); }
+function hm2min(t) { var m = /^(\d{1,2}):(\d{2})/.exec(t || ''); return m ? (+m[1]) * 60 + (+m[2]) : null; }
+function rangeMin(st, en) { var a = hm2min(st), b = hm2min(en); if (a == null || b == null) return null; if (b <= a) b += 1440; return b - a; }
+function registerCustom() {
+  getCK().forEach(function (c) {
+    var K = { label: c.label, icon: c.icon || '⭐', custom: true, ctype: c.type, unit: c.unit || '' };
+    if (c.type === 'num') K.valueLabel = c.label + (c.unit ? ' (' + c.unit + ')' : '');
+    else if (c.type === 'select') K.sel = { key: 'cs_' + c.id, name: 'cs_v', label: '内容', ph: '項目を追加（例：朝の配信）' };
+    else if (c.type === 'memo') K.textLabel = '内容（任意）';
+    else K.range = true;
+    KINDS[c.id] = K; DEFLAB[c.id] = c.label;
+  });
+}
+function rangeEditor(ex) {
+  var en = ex && ex.text_value && ex.text_value.indexOf('〜') > 0 ? ex.text_value.split('〜')[1] : '';
+  return field('終了時刻', '<input type="time" name="end_t" value="' + esc(en) + '" required>') + '<div class="itot" id="durv">長さ　—</div>';
+}
+function updDur(fm) { var t = $('#durv'); if (!t || !fm) return; var st = fm.querySelector('[name=time]').value, en = fm.querySelector('[name=end_t]').value, m = rangeMin(st, en); t.textContent = m == null ? '長さ　—' : '長さ　' + fmtDur(m) + (hm2min(en) <= hm2min(st) ? '（日をまたぐ）' : ''); }
 function setOpts(k, list) {
   var o = Object.assign({}, (data.profile && data.profile.opts) || {}); o[k] = list;
   data.profile = Object.assign({}, data.profile, { opts: o }); data.profileAt = nowStr(); dirty.profile.profile = data.profileAt; saveLocal(); scheduleSync();
@@ -241,6 +265,9 @@ function collectItems(form) {
 }
 function updTotal(form) { var t = $('#itot'); if (!t || !form) return; var c = collectItems(form); var lb = t.getAttribute('data-l') || '合計'; t.textContent = c.items.length ? lb + '　' + totalText(c.items) : lb + '　—'; }
 var EMPTY_OK = ['walkPace', 'medType'];
+function canEmpty(k) { return EMPTY_OK.indexOf(k) >= 0 || k.indexOf('cs_') === 0; }
+function isSelKey(k) { return k === 'walkPace' || k === 'weightWalk' || k === 'medType' || k.indexOf('cs_') === 0; }
+function optLabel(k) { if (OPT_LABEL[k]) return OPT_LABEL[k]; var c = getCK().filter(function (x) { return 'cs_' + x.id === k; })[0]; return '⭐ ' + (c ? c.label : k) + 'の選択肢'; }
 function splitMed(t) { t = String(t || ''); var i = t.lastIndexOf('／'); return i > 0 ? { n: t.slice(0, i), d: t.slice(i + 1) } : { n: t, d: '' }; }
 function medEditor(ex) {
   var m = splitMed(ex && ex.text_value);
@@ -321,10 +348,12 @@ var KINDS = {
   note: { label: '所見', icon: '📝', textLabel: '今日の様子', textarea: true, textRequired: true },
   place: { label: '場所', icon: '📍' }
 };
-function quickOrder() { var o = (data.profile && data.profile.qorder) || [], r = o.filter(function (k) { return QUICK.indexOf(k) >= 0; }); QUICK.forEach(function (k) { if (r.indexOf(k) < 0) r.push(k); }); return r; }
+function quickKeys() { var hid = (data.profile && data.profile.qhidden) || [], base = QUICK.filter(function (k) { return hid.indexOf(k) < 0; }); getCK().forEach(function (c) { if (!c.deleted) base.push(c.id); }); return base; }
+function quickOrder() { var keys = quickKeys(), o = (data.profile && data.profile.qorder) || [], r = o.filter(function (k) { return keys.indexOf(k) >= 0; }); keys.forEach(function (k) { if (r.indexOf(k) < 0) r.push(k); }); return r; }
 function setQOrder(arr) { data.profile = Object.assign({}, data.profile, { qorder: arr }); data.profileAt = nowStr(); dirty.profile.profile = data.profileAt; saveLocal(); scheduleSync(); }
 var DEFLAB = {}; Object.keys(KINDS).forEach(function (k) { DEFLAB[k] = KINDS[k].label; });
 function applyLabels() {
+  registerCustom();
   var kl = (data.profile && data.profile.klabels) || {};
   Object.keys(KINDS).forEach(function (k) { KINDS[k].label = kl[k] || DEFLAB[k]; });
   KINDS.water.valueLabel = KINDS.water.label + ' (g)'; KINDS.weight.valueLabel = KINDS.weight.label + ' (g)';
@@ -347,6 +376,7 @@ function describe(l) {
   else if (l.kind === 'walk') { parts.push(K.label + ' ' + num(l.value) + '分'); if (l.text_value) parts.push('（' + l.text_value + '）'); }
   else if (l.kind === 'poop') { parts.push(K.label); if (l.value != null) parts.push(num(l.value) + 'g'); if (l.text_value) parts.push('（' + l.text_value + '）'); }
   else if (l.kind === 'medicine') { var sm = splitMed(l.text_value); parts.push(K.label + '：' + sm.n + (sm.d ? '（' + sm.d + '）' : '')); }
+  else if (K.custom) { var tv = l.text_value || ''; if (K.ctype === 'range') parts.push(K.label + ' ' + tv + (l.value != null ? '（' + fmtDur(l.value) + '）' : '')); else if (K.ctype === 'num') parts.push(K.label + ' ' + num(l.value) + (K.unit || '')); else parts.push(K.label + (tv ? '：' + tv : '')); }
   else if (l.kind === 'pee') { parts.push(K.label); if (l.text_value) parts.push('（' + l.text_value + '）'); }
   else if (l.kind === 'weight') { parts.push(K.label + ' ' + num(l.value) + 'g'); if (l.text_value) parts.push('（' + l.text_value + '）'); }
   else if (l.kind === 'water') { parts.push(K.label + ' ' + num(l.value) + 'g'); if (l.text_value) parts.push('＋ ' + l.text_value); }
@@ -694,11 +724,19 @@ function viewToday() {
     (waterN ? chip('water', cg(waterN, waterG)) : '') +
     (medN ? chip('medicine', medN + '回') : '') +
     (noteN ? chip('note', noteN + '件') : '') +
+    getCK().filter(function (c) { return !c.deleted && cnt(c.id); }).map(function (c) {
+      var n = cnt(c.id), sv = sumVal(logs, c.id);
+      return chip(c.id, n + '回' + (c.type === 'range' && sv ? ' / ' + fmtDur(sv) : (c.type === 'num' ? ' / ' + num(sv) + (c.unit || '') : '')));
+    }).join('') +
     chip('weight', wl != null ? num(wl) + 'g' : '—') + '</div></div>';
   h += '<div class="card"><div class="qhead"><h3>記録する</h3><button class="btn sec" style="min-height:34px;padding:4px 12px" data-act="qedit">' + (ui.qedit ? '完了' : '↕ 並べ替え・名前') + '</button></div><div class="grid4" id="qgrid">' + quickOrder().map(function (k) {
-    if (ui.qedit) return '<div class="qbtn qt" data-k="' + k + '"><span class="i">' + KINDS[k].icon + '</span>' + esc(KINDS[k].label) + '<span class="qa"><button data-act="qmove" data-k="' + k + '" data-n="-1" aria-label="前へ">◀</button><button data-act="qren" data-k="' + k + '" aria-label="名前を変える">✎</button><button data-act="qmove" data-k="' + k + '" data-n="1" aria-label="後ろへ">▶</button></span></div>';
+    if (ui.qedit) return '<div class="qbtn qt" data-k="' + k + '"><span class="i">' + KINDS[k].icon + '</span>' + esc(KINDS[k].label) + '<span class="qa"><button data-act="qmove" data-k="' + k + '" data-n="-1" aria-label="前へ">◀</button><button data-act="qren" data-k="' + k + '" aria-label="名前を変える">✎</button><button data-act="qdel" data-k="' + k + '" aria-label="この項目を削除">✕</button><button data-act="qmove" data-k="' + k + '" data-n="1" aria-label="後ろへ">▶</button></span></div>';
     return '<button class="qbtn" data-act="add" data-kind="' + k + '"><span class="i">' + KINDS[k].icon + '</span>' + esc(KINDS[k].label) + '</button>';
-  }).join('') + '</div>' + (ui.qedit ? '<div class="hint" style="margin-top:8px">ボタンをドラッグして入れ替えできます（◀▶でも動かせます）。✎で名前を変えられます（空にすると元の名前にもどります）。終わったら「完了」を押してください。</div>' : '') + '</div>';
+  }).join('') + '</div>' + (ui.qedit ? '<div style="margin-top:10px"><button class="btn sec" data-act="kindNew">＋ 項目を追加する</button></div>' + (function () {
+    var hid = ((data.profile && data.profile.qhidden) || []).filter(function (k) { return KINDS[k]; }).map(function (k) { return { k: k, n: KINDS[k].label }; });
+    getCK().forEach(function (c) { if (c.deleted) hid.push({ k: c.id, n: c.label }); });
+    return hid.length ? '<div class="hint" style="margin-top:10px">削除した項目（タップで戻す）：</div><div class="ochips">' + hid.map(function (x) { return '<button class="chip" data-act="qrestore" data-k="' + esc(x.k) + '">↩ ' + esc(x.n) + '</button>'; }).join('') + '</div>' : '';
+  })() : '') + (ui.qedit ? '<div class="hint" style="margin-top:8px">ボタンをドラッグして入れ替えできます（◀▶でも動かせます）。✎で名前を変更、✕で項目を削除できます（削除しても、過去の記録は残ります）。終わったら「完了」を押してください。</div>' : '') + '</div>';
   var phs = data.photos.filter(function (p) { return !p.deleted && p.taken_on === d; });
   h += '<div class="card"><h3>この日の写真</h3><div class="photos">' + phs.map(function (p) { return '<button class="ph" data-act="viewPhoto" data-id="' + esc(p.id) + '"><img data-path="' + esc(p.path) + '" alt="写真"></button>'; }).join('') +
     '<button class="ph add" data-act="addPhoto"><span class="i">📷</span>写真を追加</button></div></div>';
@@ -820,8 +858,8 @@ function viewSettings() {
     '<div class="row" style="margin-bottom:8px"><input id="homeQ" style="flex:1;min-height:46px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;font-size:16px;font-family:inherit" placeholder="例：足立区" autocomplete="off"><button class="btn" data-act="homeSearch">検索</button></div><div id="placeRes"></div>' +
     '<div class="wxs" style="margin-top:8px">Weather data by <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo.com</a>（CC BY 4.0）</div></div>';
   h += '<div class="card"><h3>🧩 選択肢の管理</h3><div class="hint">ごはん・おやつ・おしっこの色の、選べる項目です（家族で共通）。消しても、過去の記録は変わりません。</div>' +
-    ['meal', 'snack', 'waterExtra', 'walkPace', 'weightWalk', 'medType', 'peeColor', 'peeAmt'].map(function (k) {
-      return '<div style="margin-top:12px"><b style="font-size:14px">' + OPT_LABEL[k] + '</b>' + optChips(k) +
+    ['meal', 'snack', 'waterExtra', 'walkPace', 'weightWalk', 'medType', 'peeColor', 'peeAmt'].concat(getCK().filter(function (c) { return !c.deleted && c.type === 'select'; }).map(function (c) { return 'cs_' + c.id; })).map(function (k) {
+      return '<div style="margin-top:12px"><b style="font-size:14px">' + esc(optLabel(k)) + '</b>' + optChips(k) +
         '<div class="nrow"><input id="optQ_' + k + '" data-newopt-s="' + k + '" placeholder="追加する項目" autocomplete="off"><button class="btn sec" data-act="optAddS" data-key="' + k + '">追加</button></div></div>';
     }).join('') + '</div>';
   h += '<div class="hint" style="text-align:center;margin:4px 0 12px">アプリの版：' + APP_VER + '（この表示が新しければ、最新版です）</div>';
@@ -849,8 +887,9 @@ function openEntry(kind, id) {
   if (!requireWho()) return;
   var K = KINDS[kind], ex = id ? data.logs.find(function (l) { return l.id === id; }) : null;
   var date = ex ? ex.at.slice(0, 10) : ui.date, time = ex ? ex.at.slice(11, 16) : hhmm(new Date()), b = '<form data-form="entry" data-kind="' + kind + '" data-id="' + esc(id || '') + '">';
-  b += '<div class="two">' + field('日付', dateField('date', date, true)) + field('時刻', '<input type="time" name="time" value="' + time + '" required>') + '</div>';
-  if (K.items) b += itemsEditor(kind, ex);
+  b += '<div class="two">' + field('日付', dateField('date', date, true)) + field(K.range ? '開始時刻' : '時刻', '<input type="time" name="time" value="' + time + '" required>') + '</div>';
+  if (K.range) b += rangeEditor(ex);
+  else if (K.items) b += itemsEditor(kind, ex);
   else if (K.pee) b += peeEditor(ex);
   else if (K.med) b += medEditor(ex);
   else {
@@ -869,12 +908,13 @@ function openEntry(kind, id) {
   if (kind !== 'note') b += field('メモ（任意）', '<input name="memo" autocomplete="off" value="' + esc(ex ? ex.memo : '') + '">');
   b += '<button class="btn block" type="submit">' + (ex ? '更新する' : '記録する') + '</button>';
   if (ex) b += '<button class="btn danger block" type="button" style="margin-top:8px" data-act="voidLog" data-id="' + esc(ex.id) + '">この記録を取り消す</button>';
-  openSheet((ex ? '' : '') + K.icon + ' ' + K.label, b + '</form>'); updTotal($('form[data-form=entry]'));
+  openSheet((ex ? '' : '') + K.icon + ' ' + K.label, b + '</form>'); updTotal($('form[data-form=entry]')); updDur($('form[data-form=entry]'));
 }
 function saveEntry(form) {
   var kind = form.getAttribute('data-kind'), id = form.getAttribute('data-id'), K = KINDS[kind], f = new FormData(form);
   var value = null, preText = null;
-  if (K.items) { var ci = collectItems(form); if (ci.bad) { toast('量は数字で入力してください'); return; } if (!ci.items.length) { toast('内容と量を、ひとつ以上入れてください'); return; } value = sumG(ci.items); preText = fmtItems(ci.items); }
+  if (K.range) { var rm = rangeMin(f.get('time'), f.get('end_t')); if (rm == null) { toast('終了時刻を入力してください'); return; } if (hm2min(f.get('end_t')) === hm2min(f.get('time'))) { toast('開始と終了が同じ時刻です'); return; } value = rm; preText = f.get('time') + '〜' + f.get('end_t'); }
+  else if (K.items) { var ci = collectItems(form); if (ci.bad) { toast('量は数字で入力してください'); return; } if (!ci.items.length) { toast('内容と量を、ひとつ以上入れてください'); return; } value = sumG(ci.items); preText = fmtItems(ci.items); }
   else if (K.med) { var mn = String(f.get('med_t') || ''), md = String(f.get('med_d') || '').trim().replace(/／/g, '/'); if (!mn) { toast('薬の種類を選んでください（なければ「リストに追加」）'); return; } preText = mn + (md ? '／' + md : ''); }
   else if (K.sel) { preText = String(f.get(K.sel.name) || ''); }
   else if (K.extra) { var cw = collectItems(form); if (cw.bad) { toast('量は数字で入力してください'); return; } preText = cw.items.length ? fmtItems(cw.items) : ''; }
@@ -893,6 +933,20 @@ function saveEntry(form) {
   ui.date = at.slice(0, 10); markDirty('logs', row); closeSheet(); toast('記録しました');
 }
 
+function openKindNew() {
+  if (!requireWho()) return;
+  var b = '<form data-form="kind">' + field('項目の名前（12文字まで）', '<input name="kname" maxlength="12" autocomplete="off" required placeholder="例：トリミング">') +
+    '<div class="two">' + field('アイコン', '<select name="kicon">' + CK_ICONS.map(function (i) { return '<option>' + i + '</option>'; }).join('') + '</select>') + field('単位（数字のとき・任意）', '<input name="kunit" maxlength="6" autocomplete="off" placeholder="例：回、個">') + '</div>' +
+    field('入力のしかた', '<select name="ktype">' + Object.keys(CK_TYPES).map(function (k) { return '<option value="' + k + '">' + CK_TYPES[k] + '</option>'; }).join('') + '</select>') +
+    '<div class="hint" style="margin-bottom:10px">あとから、名前の変更や削除ができます。</div><button class="btn block" type="submit">項目を追加する</button></form>';
+  openSheet('＋ 項目を追加', b);
+}
+function saveKindNew(form) {
+  var f = new FormData(form), name = String(f.get('kname') || '').trim().slice(0, 12); if (!name) { toast('名前を入れてください'); return; }
+  var list = getCK(), id = 'c_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+  list.push({ id: id, label: name, icon: f.get('kicon') || '⭐', type: f.get('ktype') || 'memo', unit: String(f.get('kunit') || '').trim() });
+  setCK(list); closeSheet(); render(true); toast('「' + name + '」を追加しました');
+}
 function openVisit(id) {
   if (!requireWho()) return;
   var ex = id ? data.visits.find(function (v) { return v.id === id; }) : null;
@@ -1049,7 +1103,7 @@ document.addEventListener('click', function (e) {
       else { lst.push(v); setOpts(key, lst); toast('「' + v + '」を追加しました'); fm.querySelectorAll('select[data-optkey="' + key + '"]').forEach(function (sl) { var o = document.createElement('option'); o.textContent = v; sl.appendChild(o); }); }
       inp.value = ''; optDone(el, key);
       if (key === 'peeColor') { fm.querySelector('[name=pee_c]').value = v; }
-      else if (key === 'walkPace' || key === 'weightWalk' || key === 'medType') { fm.querySelector('select[data-optkey="' + key + '"]').value = v; }
+      else if (isSelKey(key)) { fm.querySelector('select[data-optkey="' + key + '"]').value = v; }
       else if (key === 'peeAmt') { fm.querySelector('[name=pee_a]').value = v; }
       else { var rows = fm.querySelectorAll('.irow'), lr = rows[rows.length - 1];
         if (lr.querySelector('[name=it_a]').value.trim() === '') lr.querySelector('[name=it_n]').value = v;
@@ -1073,14 +1127,28 @@ document.addEventListener('click', function (e) {
         setTimeout(function () { lj.forEach(function (x) { x.classList.remove('flash'); x.classList.remove('flashcur'); }); }, 2600);
       } catch (err) { toast('移動に失敗しました：' + (err && err.message ? err.message : err)); }
       break; }
+    case 'qdel': {
+      var kd2 = el.getAttribute('data-k'), nm = KINDS[kd2].label;
+      if (!confirm('「' + nm + '」の項目（ボタン）を削除します。\n過去の記録は残ります。' + (KINDS[kd2].custom ? '' : '\n（あとで、「削除した項目」から戻せます）') + '\nよろしいですか？')) break;
+      if (KINDS[kd2].custom) { var cl2 = getCK(); cl2.forEach(function (c) { if (c.id === kd2) c.deleted = true; }); setCK(cl2); }
+      else { var hh = ((data.profile && data.profile.qhidden) || []).slice(); if (hh.indexOf(kd2) < 0) hh.push(kd2); data.profile = Object.assign({}, data.profile, { qhidden: hh }); data.profileAt = nowStr(); dirty.profile.profile = data.profileAt; saveLocal(); scheduleSync(); }
+      render(true); toast('「' + nm + '」を削除しました'); break; }
+    case 'qrestore': {
+      var kr2 = el.getAttribute('data-k');
+      if (KINDS[kr2] && KINDS[kr2].custom) { var cl3 = getCK(); cl3.forEach(function (c) { if (c.id === kr2) c.deleted = false; }); setCK(cl3); }
+      else { var h3 = ((data.profile && data.profile.qhidden) || []).filter(function (k) { return k !== kr2; }); data.profile = Object.assign({}, data.profile, { qhidden: h3 }); data.profileAt = nowStr(); dirty.profile.profile = data.profileAt; saveLocal(); scheduleSync(); }
+      render(true); toast('項目を戻しました'); break; }
+    case 'kindNew': openKindNew(); break;
     case 'qedit': ui.qedit = !ui.qedit; render(true); break;
     case 'qren': {
-      var kq = el.getAttribute('data-k'), nq = prompt('「' + DEFLAB[kq] + '」の表示名を変えます（空にすると元の名前にもどります）', KINDS[kq].label);
+      var kq = el.getAttribute('data-k');
+      if (KINDS[kq].custom) { var cn = prompt('「' + KINDS[kq].label + '」の新しい名前（12文字まで）', KINDS[kq].label); cn = String(cn || '').trim().slice(0, 12); if (!cn) break; var cl = getCK(); cl.forEach(function (c) { if (c.id === kq) c.label = cn; }); setCK(cl); render(true); toast('名前を変えました'); break; }
+      var nq = prompt('「' + DEFLAB[kq] + '」の表示名を変えます（空にすると元の名前にもどります）', KINDS[kq].label);
       if (nq === null) break; nq = String(nq).trim().slice(0, 12);
       var kls = Object.assign({}, (data.profile && data.profile.klabels) || {}); if (nq && nq !== DEFLAB[kq]) kls[kq] = nq; else delete kls[kq];
       data.profile = Object.assign({}, data.profile, { klabels: kls }); data.profileAt = nowStr(); dirty.profile.profile = data.profileAt; saveLocal(); scheduleSync(); render(true); toast(nq ? '名前を変えました' : '元の名前にもどしました'); break; }
     case 'qmove': { var ko = quickOrder(), i0 = ko.indexOf(el.getAttribute('data-k')), j0 = i0 + (+el.getAttribute('data-n')); if (j0 < 0 || j0 >= ko.length) break; var tmp = ko[i0]; ko[i0] = ko[j0]; ko[j0] = tmp; setQOrder(ko); render(true); break; }
-    case 'optDel': { var kd = el.getAttribute('data-key'), ld = getOpts(kd); if (ld.length <= 1 && EMPTY_OK.indexOf(kd) < 0) { toast('最後のひとつは消せません'); break; } ld.splice(+el.getAttribute('data-i'), 1); setOpts(kd, ld); optDone(el, kd); break; }
+    case 'optDel': { var kd = el.getAttribute('data-key'), ld = getOpts(kd); if (ld.length <= 1 && !canEmpty(kd)) { toast('最後のひとつは消せません'); break; } ld.splice(+el.getAttribute('data-i'), 1); setOpts(kd, ld); optDone(el, kd); break; }
     case 'restore': restoreRow(el.getAttribute('data-t'), id); break;
     case 'csv': exportCsv(el.getAttribute('data-t')); break;
     case 'saveBasic': {
@@ -1109,6 +1177,7 @@ document.addEventListener('submit', function (e) {
   var f = e.target.closest('form[data-form]'); if (!f) return; e.preventDefault();
   var t = f.getAttribute('data-form');
   if (t === 'entry') saveEntry(f);
+  else if (t === 'kind') saveKindNew(f);
   else if (t === 'visit') saveVisit(f);
   else if (t === 'cond') saveCond(f);
   else if (t === 'photo') { var p = data.photos.find(function (x) { return x.id === f.getAttribute('data-id'); }); if (p) { p.caption = String(new FormData(f).get('caption') || '').trim(); touch('photos', p); markDirty('photos', p); } closeSheet(); }
@@ -1125,6 +1194,7 @@ function onFormInput(e) {
   var t = e.target; if (!t || !t.closest) return;
   if (t.matches('input[type=date][data-dt]')) { var sp = t.parentNode.querySelector('.dtv span'); if (sp) sp.textContent = t.value ? dateLabel(t.value.replace(/-/g, '/')) : '（未設定）'; }
   var fm = t.closest('form[data-form=entry]'); if (fm && fm.querySelector('.items')) updTotal(fm);
+  if (fm && fm.querySelector('[name=end_t]')) updDur(fm);
 }
 var qd = null;
 function qTarget(x, y) { var els = document.elementsFromPoint(x, y); for (var i = 0; i < els.length; i++) { if (els[i].classList && els[i].classList.contains('qt') && els[i] !== qd.el) return els[i]; } return null; }
