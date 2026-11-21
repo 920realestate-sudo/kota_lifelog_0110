@@ -59,6 +59,10 @@ main{padding:12px 14px}
 .grid4{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .qbtn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:68px;border:1px solid var(--line);background:#fff;border-radius:14px;font-size:12px;color:var(--text)}
 .qbtn .i{font-size:24px;line-height:1}
+.qhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}.qhead h3{margin:0}
+.qt{min-height:84px;padding-top:8px;touch-action:none;cursor:grab;position:relative;user-select:none;-webkit-user-select:none;border-style:dashed}
+.qt.drag{opacity:.85;z-index:5;box-shadow:0 6px 16px rgba(0,0,0,.25);cursor:grabbing}.qt.over{outline:2px dashed var(--pri)}
+.qa button{border:none;background:none;font-size:13px;color:var(--muted);padding:4px 8px}
 .qbtn:active,.btn:active,.iconbtn:active{transform:scale(.97)}
 .btn{min-height:46px;padding:0 18px;border:none;border-radius:12px;background:var(--pri);color:#fff;font-size:16px;font-weight:700}
 .btn.sec{background:#fff;color:var(--text);border:1px solid var(--line)}
@@ -169,8 +173,8 @@ function dateField(name, val, required) {
   var v = String(val || '').replace(/\//g, '-'), lab = v ? dateLabel(v.replace(/-/g, '/')) : '（未設定）';
   return '<span class="dtf"><span class="dtv"><span>' + lab + '</span><i>📅</i></span><input type="date" data-dt name="' + name + '" value="' + v + '"' + (required ? ' required' : '') + '></span>';
 }
-var DEFAULT_OPTS = { meal: ['ごはん', '野菜', 'お肉', 'サプリ', 'フード'], snack: ['お芋', '煮干し', 'ささみ'], peeColor: ['透明', '薄黄色', '黄色', '濃い黄色', '赤っぽい'] };
-var OPT_LABEL = { meal: '🍚 ごはんの材料', snack: '🦴 おやつ', peeColor: '💦 おしっこの色' };
+var DEFAULT_OPTS = { meal: ['ごはん', '野菜', 'お肉', 'サプリ', 'フード'], snack: ['お芋', '煮干し', 'ささみ'], peeColor: ['透明', '薄黄色', '黄色', '濃い黄色', '赤っぽい'], peeAmt: ['シート1枚分', 'シート4分の3', 'シート半分', 'シート4分の1'], waterExtra: ['お芋', '野菜', 'サプリ'] };
+var OPT_LABEL = { meal: '🍚 ごはんの材料', snack: '🦴 おやつ', peeColor: '💦 おしっこの色', peeAmt: '💦 おしっこの量', waterExtra: '🥛 水分にプラスするもの' };
 var UNITS = ['g', '個', '本', '枚', '粒'], PEE_AMT = ['大', '中', '小', '極小'];
 function getOpts(k) { var o = data.profile && data.profile.opts && data.profile.opts[k]; return (o && o.length) ? o.slice() : DEFAULT_OPTS[k].slice(); }
 function setOpts(k, list) {
@@ -195,11 +199,11 @@ function itemRow(kind, it) {
     '<select name="it_u">' + UNITS.map(function (u) { return '<option' + (u === (it.u || 'g') ? ' selected' : '') + '>' + u + '</option>'; }).join('') + '</select>' +
     '<button type="button" class="x" data-act="itDel" aria-label="この行を消す">✕</button></div>';
 }
-function itemsEditor(kind, ex) {
-  var items = [{ n: '', a: '', u: 'g' }];
-  if (ex) { var ps = parseItems(ex.text_value); items = ps || ((ex.text_value || ex.value != null) ? [{ n: ex.text_value || KINDS[kind].label, a: ex.value == null ? '' : ex.value, u: 'g' }] : items); }
-  return '<div class="field"><label>' + (kind === 'snack' ? 'おやつ（選んで、量を入れる）' : '内容（選んで、量を入れる）') + '</label><div class="items" data-key="' + kind + '">' + items.map(function (it) { return itemRow(kind, it); }).join('') + '</div>' +
-    '<button type="button" class="btn sec" data-act="itAdd" data-key="' + kind + '">＋ 行を追加</button><div class="itot" id="itot"></div>' +
+function itemsEditor(kind, ex, o) {
+  o = o || {}; var items = [{ n: '', a: '', u: 'g' }];
+  if (ex) { var ps = parseItems(ex.text_value); if (ps) items = ps; else if (!o.optional && (ex.text_value || ex.value != null)) items = [{ n: ex.text_value || KINDS[kind].label, a: ex.value == null ? '' : ex.value, u: 'g' }]; }
+  return '<div class="field"><label>' + (o.label || (kind === 'snack' ? 'おやつ（選んで、量を入れる）' : '内容（選んで、量を入れる）')) + '</label><div class="items" data-key="' + kind + '">' + items.map(function (it) { return itemRow(kind, it); }).join('') + '</div>' +
+    '<button type="button" class="btn sec" data-act="itAdd" data-key="' + kind + '">＋ 行を追加</button><div class="itot" id="itot" data-l="' + (o.optional ? 'プラス分の合計' : '合計') + '"></div>' +
     '<div class="nrow"><input data-newopt="' + kind + '" placeholder="新しい項目名（例：かぼちゃ）" autocomplete="off"><button type="button" class="btn sec" data-act="optAdd" data-key="' + kind + '">リストに追加</button></div></div>';
 }
 function collectItems(form) {
@@ -211,14 +215,14 @@ function collectItems(form) {
   });
   return { items: items, bad: bad };
 }
-function updTotal(form) { var t = $('#itot'); if (!t || !form) return; var c = collectItems(form); t.textContent = c.items.length ? '合計　' + totalText(c.items) : '合計　—'; }
+function updTotal(form) { var t = $('#itot'); if (!t || !form) return; var c = collectItems(form); var lb = t.getAttribute('data-l') || '合計'; t.textContent = c.items.length ? lb + '　' + totalText(c.items) : lb + '　—'; }
 function peeEditor(ex) {
-  var c = '', a = '', t = ex && ex.text_value ? ex.text_value : '';
-  if (t) { var sp = t.split('・'), last = sp[sp.length - 1]; if (PEE_AMT.indexOf(last) >= 0) { a = last; sp.pop(); } c = sp.join('・'); }
-  var co = getOpts('peeColor'); if (c && co.indexOf(c) < 0) co.push(c);
-  return '<div class="two">' + field('色', '<select name="pee_c" data-optkey="peeColor"><option value="">（選ばない）</option>' + co.map(function (o) { return '<option' + (o === c ? ' selected' : '') + '>' + esc(o) + '</option>'; }).join('') + '</select>') +
-    field('量', '<select name="pee_a"><option value="">（選ばない）</option>' + PEE_AMT.map(function (o) { return '<option' + (o === a ? ' selected' : '') + '>' + o + '</option>'; }).join('') + '</select>') + '</div>' +
-    '<div class="nrow" style="margin:-4px 0 12px"><input data-newopt="peeColor" placeholder="色を追加（例：オレンジ）" autocomplete="off"><button type="button" class="btn sec" data-act="optAdd" data-key="peeColor">リストに追加</button></div>';
+  var c = '', a = '', t = ex && ex.text_value ? ex.text_value : '', ao = getOpts('peeAmt'), co = getOpts('peeColor');
+  if (t) { var sp = t.split('・'), last = sp[sp.length - 1]; if (ao.indexOf(last) >= 0 || PEE_AMT.indexOf(last) >= 0) { a = last; sp.pop(); c = sp.join('・'); } else c = t; }
+  if (c && co.indexOf(c) < 0) co.push(c); if (a && ao.indexOf(a) < 0) ao.push(a);
+  function sel(nm, key, list, cur) { return '<select name="' + nm + '" data-optkey="' + key + '"><option value="">（選ばない）</option>' + list.map(function (o) { return '<option' + (o === cur ? ' selected' : '') + '>' + esc(o) + '</option>'; }).join('') + '</select>'; }
+  function add(key, ph) { return '<div class="nrow" style="margin:-4px 0 12px"><input data-newopt="' + key + '" placeholder="' + ph + '" autocomplete="off"><button type="button" class="btn sec" data-act="optAdd" data-key="' + key + '">リストに追加</button></div>'; }
+  return field('色', sel('pee_c', 'peeColor', co, c)) + add('peeColor', '色を追加（例：オレンジ）') + field('量', sel('pee_a', 'peeAmt', ao, a)) + add('peeAmt', '量を追加（例：シート2枚分）');
 }
 function uid(p) { return p + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
 function num(n) { return (Math.round(n * 10) / 10).toLocaleString('ja-JP'); }
@@ -272,7 +276,7 @@ var ui = { tab: 'cal', date: today(), cal: today().slice(0, 7), range: 30, med: 
 var KINDS = {
   meal: { label: 'ごはん', icon: '🍚', items: true },
   snack: { label: 'おやつ', icon: '🦴', items: true },
-  water: { label: '水分', icon: '🥛', valueLabel: '量 (g)' },
+  water: { label: '水分', icon: '🥛', valueLabel: '水分 (g)', extra: 'waterExtra' },
   walk: { label: '散歩', icon: '🐾', valueLabel: '時間 (分)' },
   poop: { label: 'うんち', icon: '💩', valueLabel: '量 (g)', valueOptional: true, textLabel: '状態', options: ['良好', 'やわらかい', '下痢', '硬い', '異常あり'] },
   pee: { label: 'おしっこ', icon: '💦', pee: true },
@@ -281,6 +285,8 @@ var KINDS = {
   note: { label: '所見', icon: '📝', textLabel: '今日の様子', textarea: true, textRequired: true },
   place: { label: '場所', icon: '📍' }
 };
+function quickOrder() { var o = (data.profile && data.profile.qorder) || [], r = o.filter(function (k) { return QUICK.indexOf(k) >= 0; }); QUICK.forEach(function (k) { if (r.indexOf(k) < 0) r.push(k); }); return r; }
+function setQOrder(arr) { data.profile = Object.assign({}, data.profile, { qorder: arr }); data.profileAt = nowStr(); dirty.profile.profile = data.profileAt; saveLocal(); scheduleSync(); }
 var QUICK = ['meal', 'snack', 'walk', 'poop', 'pee', 'weight', 'water', 'weather', 'note'];
 
 /* ================= 取得ヘルパー ================= */
@@ -300,7 +306,7 @@ function describe(l) {
   else if (l.kind === 'poop') { parts.push('うんち'); if (l.value != null) parts.push(num(l.value) + 'g'); if (l.text_value) parts.push('（' + l.text_value + '）'); }
   else if (l.kind === 'pee') { parts.push('おしっこ'); if (l.text_value) parts.push('（' + l.text_value + '）'); }
   else if (l.kind === 'weight') { parts.push('体重 ' + num(l.value) + 'g'); }
-  else if (l.kind === 'water') { parts.push('水分 ' + num(l.value) + 'g'); }
+  else if (l.kind === 'water') { parts.push('水分 ' + num(l.value) + 'g'); if (l.text_value) parts.push('＋ ' + l.text_value); }
   else if (l.kind === 'weather') { parts.push('天気：' + l.text_value); }
   else if (l.kind === 'note') { parts.push(l.text_value); }
   else if (l.kind === 'place') { parts.push('この日の場所：' + (l.text_value || '')); }
@@ -635,7 +641,10 @@ function viewToday() {
     '<span class="chip">🍚 ' + num(meal) + 'g</span>' + (snackG ? '<span class="chip">🦴 ' + num(snackG) + 'g</span>' : '') + '<span class="chip">🐾 ' + num(walk) + '分</span>' +
     '<span class="chip">💩 ' + poopN + '回' + (poopG ? ' / ' + num(poopG) + 'g' : '') + '</span>' +
     '<span class="chip">⚖️ ' + (wl != null ? num(wl) + 'g' : '—') + '</span></div></div>';
-  h += '<div class="card"><h3>記録する</h3><div class="grid4">' + QUICK.map(function (k) { return '<button class="qbtn" data-act="add" data-kind="' + k + '"><span class="i">' + KINDS[k].icon + '</span>' + KINDS[k].label + '</button>'; }).join('') + '</div></div>';
+  h += '<div class="card"><div class="qhead"><h3>記録する</h3><button class="btn sec" style="min-height:34px;padding:4px 12px" data-act="qedit">' + (ui.qedit ? '完了' : '↕ 並べ替え') + '</button></div><div class="grid4" id="qgrid">' + quickOrder().map(function (k) {
+    if (ui.qedit) return '<div class="qbtn qt" data-k="' + k + '"><span class="i">' + KINDS[k].icon + '</span>' + KINDS[k].label + '<span class="qa"><button data-act="qmove" data-k="' + k + '" data-n="-1" aria-label="前へ">◀</button><button data-act="qmove" data-k="' + k + '" data-n="1" aria-label="後ろへ">▶</button></span></div>';
+    return '<button class="qbtn" data-act="add" data-kind="' + k + '"><span class="i">' + KINDS[k].icon + '</span>' + KINDS[k].label + '</button>';
+  }).join('') + '</div>' + (ui.qedit ? '<div class="hint" style="margin-top:8px">ボタンをドラッグして入れ替えできます（◀▶でも動かせます）。終わったら「完了」を押してください。</div>' : '') + '</div>';
   var phs = data.photos.filter(function (p) { return !p.deleted && p.taken_on === d; });
   h += '<div class="card"><h3>この日の写真</h3><div class="photos">' + phs.map(function (p) { return '<button class="ph" data-act="viewPhoto" data-id="' + esc(p.id) + '"><img data-path="' + esc(p.path) + '" alt="写真"></button>'; }).join('') +
     '<button class="ph add" data-act="addPhoto"><span class="i">📷</span>写真を追加</button></div></div>';
@@ -757,8 +766,8 @@ function viewSettings() {
     '<div class="row" style="margin-bottom:8px"><input id="homeQ" style="flex:1;min-height:46px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;font-size:16px;font-family:inherit" placeholder="例：足立区" autocomplete="off"><button class="btn" data-act="homeSearch">検索</button></div><div id="placeRes"></div>' +
     '<div class="wxs" style="margin-top:8px">Weather data by <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo.com</a>（CC BY 4.0）</div></div>';
   h += '<div class="card"><h3>🧩 選択肢の管理</h3><div class="hint">ごはん・おやつ・おしっこの色の、選べる項目です（家族で共通）。消しても、過去の記録は変わりません。</div>' +
-    ['meal', 'snack', 'peeColor'].map(function (k) {
-      return '<div style="margin-top:12px"><b style="font-size:14px">' + OPT_LABEL[k] + '</b><div class="ochips">' + getOpts(k).map(function (o, i) { return '<span class="ochip">' + esc(o) + '<button data-act="optDel" data-key="' + k + '" data-i="' + i + '" aria-label="' + esc(o) + 'を消す">✕</button></span>'; }).join('') + '</div>' +
+    ['meal', 'snack', 'waterExtra', 'peeColor', 'peeAmt'].map(function (k) {
+      return '<div style="margin-top:12px"><b style="font-size:14px">' + OPT_LABEL[k] + '</b><div class="ochips">' + getOpts(k).map(function (o, i) { return '<span class="ochip">' + esc(o) + '<button data-act="optRen" data-key="' + k + '" data-i="' + i + '" aria-label="' + esc(o) + 'の名前を変える">✎</button><button data-act="optDel" data-key="' + k + '" data-i="' + i + '" aria-label="' + esc(o) + 'を消す">✕</button></span>'; }).join('') + '</div>' +
         '<div class="nrow"><input id="optQ_' + k + '" data-newopt-s="' + k + '" placeholder="追加する項目" autocomplete="off"><button class="btn sec" data-act="optAddS" data-key="' + k + '">追加</button></div></div>';
     }).join('') + '</div>';
   h += '<div class="card"><h3>💾 バックアップ（CSV）</h3><div class="hint" style="margin-bottom:8px">無料プランにはバックアップがないため、ときどき保存してください。</div>' +
@@ -790,6 +799,7 @@ function openEntry(kind, id) {
   else if (K.pee) b += peeEditor(ex);
   else {
   if (K.valueLabel) b += field(K.valueLabel + (K.valueOptional ? '（わかれば）' : ''), '<input name="value" inputmode="decimal" autocomplete="off" value="' + (ex && ex.value != null ? esc(ex.value) : '') + '"' + (K.valueOptional ? '' : ' required') + '>');
+  if (K.extra) b += itemsEditor(K.extra, ex, { optional: true, label: '水分にプラスしたもの（任意：選んで、量を入れる）' });
   if (K.options) {
     b += field(K.textLabel, '<select name="text">' + (K.textRequired ? '' : '<option value="">（選ばない）</option>') + K.options.map(function (o) { return '<option' + (ex && ex.text_value === o ? ' selected' : '') + '>' + esc(o) + '</option>'; }).join('') + '</select>');
   } else if (K.textarea) {
@@ -808,6 +818,7 @@ function saveEntry(form) {
   var kind = form.getAttribute('data-kind'), id = form.getAttribute('data-id'), K = KINDS[kind], f = new FormData(form);
   var value = null, preText = null;
   if (K.items) { var ci = collectItems(form); if (ci.bad) { toast('量は数字で入力してください'); return; } if (!ci.items.length) { toast('内容と量を、ひとつ以上入れてください'); return; } value = sumG(ci.items); preText = fmtItems(ci.items); }
+  else if (K.extra) { var cw = collectItems(form); if (cw.bad) { toast('量は数字で入力してください'); return; } preText = cw.items.length ? fmtItems(cw.items) : ''; }
   else if (K.pee) { preText = [f.get('pee_c'), f.get('pee_a')].filter(Boolean).join('・'); }
   if (K.valueLabel) {
     var raw = toHalf(f.get('value') || '').replace(/,/g, '').trim();
@@ -979,11 +990,15 @@ document.addEventListener('click', function (e) {
       else { lst.push(v); setOpts(key, lst); toast('「' + v + '」を追加しました'); fm.querySelectorAll('select[data-optkey="' + key + '"]').forEach(function (sl) { var o = document.createElement('option'); o.textContent = v; sl.appendChild(o); }); }
       inp.value = '';
       if (key === 'peeColor') { fm.querySelector('[name=pee_c]').value = v; }
+      else if (key === 'peeAmt') { fm.querySelector('[name=pee_a]').value = v; }
       else { var rows = fm.querySelectorAll('.irow'), lr = rows[rows.length - 1];
         if (lr.querySelector('[name=it_a]').value.trim() === '') lr.querySelector('[name=it_n]').value = v;
         else { fm.querySelector('.items').insertAdjacentHTML('beforeend', itemRow(key, { n: v, a: '', u: 'g' })); } }
       break; }
     case 'optAddS': { var ks = el.getAttribute('data-key'), vi = String($('#optQ_' + ks).value || '').trim(); if (!vi) break; var ls = getOpts(ks); if (ls.indexOf(vi) >= 0) { toast('もうリストにあります'); break; } ls.push(vi); setOpts(ks, ls); render(true); toast('追加しました'); break; }
+    case 'optRen': { var kr = el.getAttribute('data-key'), ir = +el.getAttribute('data-i'), lr = getOpts(kr), nv = prompt('新しい名前にします（過去の記録は、そのまま残ります）', lr[ir]); nv = String(nv || '').trim(); if (!nv || nv === lr[ir]) break; if (lr.indexOf(nv) >= 0) { toast('同じ名前がもうあります'); break; } lr[ir] = nv; setOpts(kr, lr); render(true); toast('名前を変えました'); break; }
+    case 'qedit': ui.qedit = !ui.qedit; render(true); break;
+    case 'qmove': { var ko = quickOrder(), i0 = ko.indexOf(el.getAttribute('data-k')), j0 = i0 + (+el.getAttribute('data-n')); if (j0 < 0 || j0 >= ko.length) break; var tmp = ko[i0]; ko[i0] = ko[j0]; ko[j0] = tmp; setQOrder(ko); render(true); break; }
     case 'optDel': { var kd = el.getAttribute('data-key'), ld = getOpts(kd); if (ld.length <= 1) { toast('最後のひとつは消せません'); break; } ld.splice(+el.getAttribute('data-i'), 1); setOpts(kd, ld); render(true); break; }
     case 'restore': restoreRow(el.getAttribute('data-t'), id); break;
     case 'csv': exportCsv(el.getAttribute('data-t')); break;
@@ -1030,6 +1045,23 @@ function onFormInput(e) {
   if (t.matches('input[type=date][data-dt]')) { var sp = t.parentNode.querySelector('.dtv span'); if (sp) sp.textContent = t.value ? dateLabel(t.value.replace(/-/g, '/')) : '（未設定）'; }
   var fm = t.closest('form[data-form=entry]'); if (fm && fm.querySelector('.items')) updTotal(fm);
 }
+var qd = null;
+function qTarget(x, y) { var els = document.elementsFromPoint(x, y); for (var i = 0; i < els.length; i++) { if (els[i].classList && els[i].classList.contains('qt') && els[i] !== qd.el) return els[i]; } return null; }
+document.addEventListener('pointerdown', function (e) { var t = e.target.closest && e.target.closest('.qt'); if (!t || e.target.closest('.qa')) return; qd = { el: t, x: e.clientX, y: e.clientY, on: false, id: e.pointerId, over: null }; });
+document.addEventListener('pointermove', function (e) {
+  if (!qd) return; var dx = e.clientX - qd.x, dy = e.clientY - qd.y;
+  if (!qd.on) { if (Math.abs(dx) + Math.abs(dy) < 8) return; qd.on = true; qd.el.classList.add('drag'); try { qd.el.setPointerCapture(qd.id); } catch (x) {} }
+  qd.el.style.transform = 'translate(' + dx + 'px,' + dy + 'px)';
+  var tg = qTarget(e.clientX, e.clientY); if (qd.over && qd.over !== tg) qd.over.classList.remove('over'); qd.over = tg; if (tg) tg.classList.add('over');
+});
+function qEnd(e, commit) {
+  if (!qd) return; var q = qd; qd = null;
+  if (!q.on) return;
+  q.el.classList.remove('drag'); q.el.style.transform = ''; if (q.over) q.over.classList.remove('over');
+  if (commit && q.over) { var ks = quickOrder(), a = q.el.getAttribute('data-k'), b = q.over.getAttribute('data-k'); ks.splice(ks.indexOf(a), 1); ks.splice(ks.indexOf(b) + (0), 0, a); setQOrder(ks); render(true); }
+}
+document.addEventListener('pointerup', function (e) { qEnd(e, true); });
+document.addEventListener('pointercancel', function (e) { qEnd(e, false); });
 document.addEventListener('input', onFormInput); document.addEventListener('change', onFormInput);
 document.addEventListener('keydown', function (e) {
   if (e.key !== 'Enter' || !e.target.matches) return;
