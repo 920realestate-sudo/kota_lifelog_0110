@@ -176,6 +176,7 @@ function dateField(name, val, required) {
   var v = String(val || '').replace(/\//g, '-'), lab = v ? dateLabel(v.replace(/-/g, '/')) : '（未設定）';
   return '<span class="dtf"><span class="dtv"><span>' + lab + '</span><i>📅</i></span><input type="date" data-dt name="' + name + '" value="' + v + '"' + (required ? ' required' : '') + '></span>';
 }
+var APP_VER = '2026-11-21 e';
 var DEFAULT_OPTS = { meal: ['ごはん', '野菜', 'お肉', 'サプリ', 'フード'], snack: ['お芋', '煮干し', 'ささみ'], peeColor: ['透明', '薄黄色', '黄色', '濃い黄色', '赤っぽい'], peeAmt: ['シート1枚分', 'シート4分の3', 'シート半分', 'シート4分の1'], waterExtra: ['お芋', '野菜', 'サプリ'], walkPace: [], weightWalk: ['散歩した', '散歩しなかった'], medType: [] };
 var OPT_LABEL = { meal: '🍚 ごはんの材料', snack: '🦴 おやつ', peeColor: '💦 おしっこの色', peeAmt: '💦 おしっこの量', waterExtra: '🥛 水分にプラスするもの', walkPace: '🐾 散歩のペース', weightWalk: '⚖️ 体重の「散歩の有無」', medType: '💊 お薬の種類' };
 var UNITS = ['g', '個', '本', '枚', '粒'], PEE_AMT = ['大', '中', '小', '極小'];
@@ -823,6 +824,7 @@ function viewSettings() {
       return '<div style="margin-top:12px"><b style="font-size:14px">' + OPT_LABEL[k] + '</b>' + optChips(k) +
         '<div class="nrow"><input id="optQ_' + k + '" data-newopt-s="' + k + '" placeholder="追加する項目" autocomplete="off"><button class="btn sec" data-act="optAddS" data-key="' + k + '">追加</button></div></div>';
     }).join('') + '</div>';
+  h += '<div class="hint" style="text-align:center;margin:4px 0 12px">アプリの版：' + APP_VER + '（この表示が新しければ、最新版です）</div>';
   h += '<div class="card"><h3>💾 バックアップ（CSV）</h3><div class="hint" style="margin-bottom:8px">無料プランにはバックアップがないため、ときどき保存してください。</div>' +
     '<div class="row" style="flex-wrap:wrap"><button class="btn sec" data-act="csv" data-t="logs">日々の記録</button><button class="btn sec" data-act="csv" data-t="visits">通院記録</button><button class="btn sec" data-act="csv" data-t="conditions">病気・投薬</button></div></div>';
   var tn = trashItems().length;
@@ -1058,14 +1060,19 @@ document.addEventListener('click', function (e) {
     case 'optMove': { var km = el.getAttribute('data-key'), lm = getOpts(km), im = +el.getAttribute('data-i'), jm = im + (+el.getAttribute('data-n')); if (jm < 0 || jm >= lm.length) break; var tm = lm[im]; lm[im] = lm[jm]; lm[jm] = tm; setOpts(km, lm); optDone(el, km); break; }
     case 'optPanel': { var pn = el.parentNode.querySelector('.opanel[data-key="' + el.getAttribute('data-key') + '"]'); if (pn.hidden) { pn.innerHTML = optChips(el.getAttribute('data-key')); pn.hidden = false; el.textContent = '▲ リストの編集をとじる'; } else { pn.hidden = true; el.textContent = '✎ リストを編集（削除・並べ替え）'; } break; }
     case 'jump': {
-      var kj = el.getAttribute('data-k'), lj = [].slice.call(document.querySelectorAll('.tl li[data-kind="' + kj + '"]'));
-      if (!lj.length) { toast('この日の「' + KINDS[kj].label + '」の記録は、まだありません'); break; }
-      if (kj === 'weight') lj.reverse();
-      var ij = ui.jk === kj ? ((ui.ji + 1) % lj.length) : 0; ui.jk = kj; ui.ji = ij;
-      document.querySelectorAll('.tl li.flash,.tl li.flashcur').forEach(function (x) { x.classList.remove('flash', 'flashcur'); });
-      lj.forEach(function (x) { x.classList.add('flash'); }); lj[ij].classList.add('flashcur');
-      lj[ij].scrollIntoView({ behavior: 'smooth', block: 'center' });
-      setTimeout(function () { lj.forEach(function (x) { x.classList.remove('flash', 'flashcur'); }); }, 2600); break; }
+      try {
+        var kj = el.getAttribute('data-k'), lj = [].slice.call(document.querySelectorAll('.tl li[data-kind="' + kj + '"]'));
+        if (!lj.length) { toast('この日の「' + KINDS[kj].label + '」の記録は、まだありません'); break; }
+        if (kj === 'weight') lj.reverse();
+        var ij = ui.jk === kj ? ((ui.ji + 1) % lj.length) : 0; ui.jk = kj; ui.ji = ij;
+        [].slice.call(document.querySelectorAll('.tl li.flash, .tl li.flashcur')).forEach(function (x) { x.classList.remove('flash'); x.classList.remove('flashcur'); });
+        lj.forEach(function (x) { x.classList.add('flash'); }); lj[ij].classList.add('flashcur');
+        var rc = lj[ij].getBoundingClientRect(), top = Math.max(0, (window.pageYOffset || document.documentElement.scrollTop || 0) + rc.top - Math.round(window.innerHeight / 2) + Math.round(rc.height / 2));
+        window.scrollTo(0, top); document.documentElement.scrollTop = top; document.body.scrollTop = top;
+        toast(KINDS[kj].label + 'の記録へ移動（' + (ij + 1) + '/' + lj.length + '件目）');
+        setTimeout(function () { lj.forEach(function (x) { x.classList.remove('flash'); x.classList.remove('flashcur'); }); }, 2600);
+      } catch (err) { toast('移動に失敗しました：' + (err && err.message ? err.message : err)); }
+      break; }
     case 'qedit': ui.qedit = !ui.qedit; render(true); break;
     case 'qren': {
       var kq = el.getAttribute('data-k'), nq = prompt('「' + DEFLAB[kq] + '」の表示名を変えます（空にすると元の名前にもどります）', KINDS[kq].label);
