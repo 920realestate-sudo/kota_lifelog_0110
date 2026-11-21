@@ -174,8 +174,8 @@ function dateField(name, val, required) {
   var v = String(val || '').replace(/\//g, '-'), lab = v ? dateLabel(v.replace(/-/g, '/')) : '（未設定）';
   return '<span class="dtf"><span class="dtv"><span>' + lab + '</span><i>📅</i></span><input type="date" data-dt name="' + name + '" value="' + v + '"' + (required ? ' required' : '') + '></span>';
 }
-var DEFAULT_OPTS = { meal: ['ごはん', '野菜', 'お肉', 'サプリ', 'フード'], snack: ['お芋', '煮干し', 'ささみ'], peeColor: ['透明', '薄黄色', '黄色', '濃い黄色', '赤っぽい'], peeAmt: ['シート1枚分', 'シート4分の3', 'シート半分', 'シート4分の1'], waterExtra: ['お芋', '野菜', 'サプリ'] };
-var OPT_LABEL = { meal: '🍚 ごはんの材料', snack: '🦴 おやつ', peeColor: '💦 おしっこの色', peeAmt: '💦 おしっこの量', waterExtra: '🥛 水分にプラスするもの' };
+var DEFAULT_OPTS = { meal: ['ごはん', '野菜', 'お肉', 'サプリ', 'フード'], snack: ['お芋', '煮干し', 'ささみ'], peeColor: ['透明', '薄黄色', '黄色', '濃い黄色', '赤っぽい'], peeAmt: ['シート1枚分', 'シート4分の3', 'シート半分', 'シート4分の1'], waterExtra: ['お芋', '野菜', 'サプリ'], walkPace: [], weightWalk: ['散歩した', '散歩しなかった'] };
+var OPT_LABEL = { meal: '🍚 ごはんの材料', snack: '🦴 おやつ', peeColor: '💦 おしっこの色', peeAmt: '💦 おしっこの量', waterExtra: '🥛 水分にプラスするもの', walkPace: '🐾 散歩のペース', weightWalk: '⚖️ 体重の「散歩の有無」' };
 var UNITS = ['g', '個', '本', '枚', '粒'], PEE_AMT = ['大', '中', '小', '極小'];
 function getOpts(k) { var o = data.profile && data.profile.opts && data.profile.opts[k]; return (o && o.length) ? o.slice() : DEFAULT_OPTS[k].slice(); }
 function setOpts(k, list) {
@@ -184,6 +184,7 @@ function setOpts(k, list) {
 }
 function optChips(k) {
   var l = getOpts(k);
+  if (!l.length) return '<div class="hint" style="margin:6px 0">（まだ項目がありません。下の欄から追加してください）</div>';
   return '<div class="ochips">' + l.map(function (o, i) {
     return '<span class="ochip">' + (i > 0 ? '<button type="button" data-act="optMove" data-key="' + k + '" data-i="' + i + '" data-n="-1" aria-label="前へ">◀</button>' : '') + '<span>' + esc(o) + '</span>' + (i < l.length - 1 ? '<button type="button" data-act="optMove" data-key="' + k + '" data-i="' + i + '" data-n="1" aria-label="後ろへ">▶</button>' : '') +
       '<button type="button" data-act="optRen" data-key="' + k + '" data-i="' + i + '" aria-label="' + esc(o) + 'の名前を変える">✎</button><button type="button" data-act="optDel" data-key="' + k + '" data-i="' + i + '" aria-label="' + esc(o) + 'を消す">✕</button></span>';
@@ -236,6 +237,12 @@ function collectItems(form) {
   return { items: items, bad: bad };
 }
 function updTotal(form) { var t = $('#itot'); if (!t || !form) return; var c = collectItems(form); var lb = t.getAttribute('data-l') || '合計'; t.textContent = c.items.length ? lb + '　' + totalText(c.items) : lb + '　—'; }
+var EMPTY_OK = ['walkPace'];
+function selEditor(S, ex) {
+  var cur = ex && ex.text_value ? ex.text_value : '', l = getOpts(S.key); if (cur && l.indexOf(cur) < 0) l.push(cur);
+  return field(S.label, '<select name="' + S.name + '" data-optkey="' + S.key + '"><option value="">（選ばない）</option>' + l.map(function (o) { return '<option' + (o === cur ? ' selected' : '') + '>' + esc(o) + '</option>'; }).join('') + '</select>') +
+    '<div class="nrow" style="margin:-4px 0 0"><input data-newopt="' + S.key + '" placeholder="' + S.ph + '" autocomplete="off"><button type="button" class="btn sec" data-act="optAdd" data-key="' + S.key + '">リストに追加</button></div>' + optToggle(S.key).replace('margin-top:6px', 'margin:6px 0 12px');
+}
 function peeEditor(ex) {
   var c = '', a = '', t = ex && ex.text_value ? ex.text_value : '', ao = getOpts('peeAmt'), co = getOpts('peeColor');
   if (t) { var sp = t.split('・'), last = sp[sp.length - 1]; if (ao.indexOf(last) >= 0 || PEE_AMT.indexOf(last) >= 0) { a = last; sp.pop(); c = sp.join('・'); } else c = t; }
@@ -297,10 +304,10 @@ var KINDS = {
   meal: { label: 'ごはん', icon: '🍚', items: true },
   snack: { label: 'おやつ', icon: '🦴', items: true },
   water: { label: '水分', icon: '🥛', valueLabel: '水分 (g)', extra: 'waterExtra' },
-  walk: { label: '散歩', icon: '🐾', valueLabel: '時間 (分)' },
+  walk: { label: '散歩', icon: '🐾', valueLabel: '時間 (分)', sel: { key: 'walkPace', name: 'walk_p', label: '散歩のペース', ph: 'ペースを追加（例：ゆっくり）' } },
   poop: { label: 'うんち', icon: '💩', valueLabel: '量 (g)', valueOptional: true, textLabel: '状態', options: ['良好', 'やわらかい', '下痢', '硬い', '異常あり'] },
   pee: { label: 'おしっこ', icon: '💦', pee: true },
-  weight: { label: '体重', icon: '⚖️', valueLabel: '体重 (g)' },
+  weight: { label: '体重', icon: '⚖️', valueLabel: '体重 (g)', sel: { key: 'weightWalk', name: 'wt_w', label: '散歩の有無', ph: '選択肢を追加（例：散歩前）' } },
   weather: { label: '天気', icon: '☀️', textLabel: '天気', options: ['晴れ', 'くもり', '雨', '雪'], textRequired: true },
   note: { label: '所見', icon: '📝', textLabel: '今日の様子', textarea: true, textRequired: true },
   place: { label: '場所', icon: '📍' }
@@ -322,10 +329,10 @@ function describe(l) {
     if (its) { parts.push(K.label + '：' + l.text_value); if (its.filter(function (x) { return x.u === 'g'; }).length > 1 && l.value != null) parts.push('（計' + num(l.value) + 'g）'); }
     else { parts.push(l.text_value || K.label); if (l.value != null) parts.push(num(l.value) + 'g'); }
   }
-  else if (l.kind === 'walk') { parts.push('散歩 ' + num(l.value) + '分'); }
+  else if (l.kind === 'walk') { parts.push('散歩 ' + num(l.value) + '分'); if (l.text_value) parts.push('（' + l.text_value + '）'); }
   else if (l.kind === 'poop') { parts.push('うんち'); if (l.value != null) parts.push(num(l.value) + 'g'); if (l.text_value) parts.push('（' + l.text_value + '）'); }
   else if (l.kind === 'pee') { parts.push('おしっこ'); if (l.text_value) parts.push('（' + l.text_value + '）'); }
-  else if (l.kind === 'weight') { parts.push('体重 ' + num(l.value) + 'g'); }
+  else if (l.kind === 'weight') { parts.push('体重 ' + num(l.value) + 'g'); if (l.text_value) parts.push('（' + l.text_value + '）'); }
   else if (l.kind === 'water') { parts.push('水分 ' + num(l.value) + 'g'); if (l.text_value) parts.push('＋ ' + l.text_value); }
   else if (l.kind === 'weather') { parts.push('天気：' + l.text_value); }
   else if (l.kind === 'note') { parts.push(l.text_value); }
@@ -786,7 +793,7 @@ function viewSettings() {
     '<div class="row" style="margin-bottom:8px"><input id="homeQ" style="flex:1;min-height:46px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;font-size:16px;font-family:inherit" placeholder="例：足立区" autocomplete="off"><button class="btn" data-act="homeSearch">検索</button></div><div id="placeRes"></div>' +
     '<div class="wxs" style="margin-top:8px">Weather data by <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo.com</a>（CC BY 4.0）</div></div>';
   h += '<div class="card"><h3>🧩 選択肢の管理</h3><div class="hint">ごはん・おやつ・おしっこの色の、選べる項目です（家族で共通）。消しても、過去の記録は変わりません。</div>' +
-    ['meal', 'snack', 'waterExtra', 'peeColor', 'peeAmt'].map(function (k) {
+    ['meal', 'snack', 'waterExtra', 'walkPace', 'weightWalk', 'peeColor', 'peeAmt'].map(function (k) {
       return '<div style="margin-top:12px"><b style="font-size:14px">' + OPT_LABEL[k] + '</b>' + optChips(k) +
         '<div class="nrow"><input id="optQ_' + k + '" data-newopt-s="' + k + '" placeholder="追加する項目" autocomplete="off"><button class="btn sec" data-act="optAddS" data-key="' + k + '">追加</button></div></div>';
     }).join('') + '</div>';
@@ -819,6 +826,7 @@ function openEntry(kind, id) {
   else if (K.pee) b += peeEditor(ex);
   else {
   if (K.valueLabel) b += field(K.valueLabel + (K.valueOptional ? '（わかれば）' : ''), '<input name="value" inputmode="decimal" autocomplete="off" value="' + (ex && ex.value != null ? esc(ex.value) : '') + '"' + (K.valueOptional ? '' : ' required') + '>');
+  if (K.sel) b += selEditor(K.sel, ex);
   if (K.extra) b += itemsEditor(K.extra, ex, { optional: true, label: '水分にプラスしたもの（任意：選んで、量を入れる）' });
   if (K.options) {
     b += field(K.textLabel, '<select name="text">' + (K.textRequired ? '' : '<option value="">（選ばない）</option>') + K.options.map(function (o) { return '<option' + (ex && ex.text_value === o ? ' selected' : '') + '>' + esc(o) + '</option>'; }).join('') + '</select>');
@@ -838,6 +846,7 @@ function saveEntry(form) {
   var kind = form.getAttribute('data-kind'), id = form.getAttribute('data-id'), K = KINDS[kind], f = new FormData(form);
   var value = null, preText = null;
   if (K.items) { var ci = collectItems(form); if (ci.bad) { toast('量は数字で入力してください'); return; } if (!ci.items.length) { toast('内容と量を、ひとつ以上入れてください'); return; } value = sumG(ci.items); preText = fmtItems(ci.items); }
+  else if (K.sel) { preText = String(f.get(K.sel.name) || ''); }
   else if (K.extra) { var cw = collectItems(form); if (cw.bad) { toast('量は数字で入力してください'); return; } preText = cw.items.length ? fmtItems(cw.items) : ''; }
   else if (K.pee) { preText = [f.get('pee_c'), f.get('pee_a')].filter(Boolean).join('・'); }
   if (K.valueLabel) {
@@ -1010,6 +1019,7 @@ document.addEventListener('click', function (e) {
       else { lst.push(v); setOpts(key, lst); toast('「' + v + '」を追加しました'); fm.querySelectorAll('select[data-optkey="' + key + '"]').forEach(function (sl) { var o = document.createElement('option'); o.textContent = v; sl.appendChild(o); }); }
       inp.value = ''; optDone(el, key);
       if (key === 'peeColor') { fm.querySelector('[name=pee_c]').value = v; }
+      else if (key === 'walkPace' || key === 'weightWalk') { fm.querySelector('select[data-optkey="' + key + '"]').value = v; }
       else if (key === 'peeAmt') { fm.querySelector('[name=pee_a]').value = v; }
       else { var rows = fm.querySelectorAll('.irow'), lr = rows[rows.length - 1];
         if (lr.querySelector('[name=it_a]').value.trim() === '') lr.querySelector('[name=it_n]').value = v;
@@ -1021,7 +1031,7 @@ document.addEventListener('click', function (e) {
     case 'optPanel': { var pn = el.parentNode.querySelector('.opanel[data-key="' + el.getAttribute('data-key') + '"]'); if (pn.hidden) { pn.innerHTML = optChips(el.getAttribute('data-key')); pn.hidden = false; el.textContent = '▲ リストの編集をとじる'; } else { pn.hidden = true; el.textContent = '✎ リストを編集（削除・並べ替え）'; } break; }
     case 'qedit': ui.qedit = !ui.qedit; render(true); break;
     case 'qmove': { var ko = quickOrder(), i0 = ko.indexOf(el.getAttribute('data-k')), j0 = i0 + (+el.getAttribute('data-n')); if (j0 < 0 || j0 >= ko.length) break; var tmp = ko[i0]; ko[i0] = ko[j0]; ko[j0] = tmp; setQOrder(ko); render(true); break; }
-    case 'optDel': { var kd = el.getAttribute('data-key'), ld = getOpts(kd); if (ld.length <= 1) { toast('最後のひとつは消せません'); break; } ld.splice(+el.getAttribute('data-i'), 1); setOpts(kd, ld); optDone(el, kd); break; }
+    case 'optDel': { var kd = el.getAttribute('data-key'), ld = getOpts(kd); if (ld.length <= 1 && EMPTY_OK.indexOf(kd) < 0) { toast('最後のひとつは消せません'); break; } ld.splice(+el.getAttribute('data-i'), 1); setOpts(kd, ld); optDone(el, kd); break; }
     case 'restore': restoreRow(el.getAttribute('data-t'), id); break;
     case 'csv': exportCsv(el.getAttribute('data-t')); break;
     case 'saveBasic': {
