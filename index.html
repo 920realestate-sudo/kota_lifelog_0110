@@ -678,15 +678,16 @@ function viewToday() {
   if (!syncCfg) h += '<div class="card" style="background:#fff8e6;border-color:#f1dca3"><b>いまは、この端末だけに保存されています。</b><div class="hint" style="margin-top:4px">家族で共有するには、設定でクラウド同期（URLとキー）を入力してください。<br><button class="btn sec" style="margin-top:8px" data-act="tab" data-tab="settings">設定を開く</button></div></div>';
   var snackG = sumVal(logs, 'snack'), meal = sumVal(logs, 'meal'), walk = sumVal(logs, 'walk'), poopN = logs.filter(function (l) { return l.kind === 'poop'; }).length, poopG = sumVal(logs, 'poop');
   var ws = logs.filter(function (l) { return l.kind === 'weight'; }), wl = ws.length ? ws[ws.length - 1].value : null;
+  function cg(n, g) { return n + '回' + (g ? ' / ' + num(g) + 'g' : ''); }
   function cnt(k) { return logs.filter(function (l) { return l.kind === k; }).length; }
-  var snackN = cnt('snack'), peeN = cnt('pee'), waterN = cnt('water'), waterG = sumVal(logs, 'water'), medN = cnt('medicine'), noteN = cnt('note');
+  var mealN = cnt('meal'), snackN = cnt('snack'), peeN = cnt('pee'), waterN = cnt('water'), waterG = sumVal(logs, 'water'), medN = cnt('medicine'), noteN = cnt('note');
   h += '<div class="card"><div class="chips">' +
-    '<span class="chip">' + KINDS.meal.icon + ' ' + num(meal) + 'g</span>' +
-    (snackN ? '<span class="chip">' + KINDS.snack.icon + ' ' + (snackG ? num(snackG) + 'g' : snackN + '回') + (snackG && snackN > 1 ? '（' + snackN + '回）' : '') + '</span>' : '') +
+    '<span class="chip">' + KINDS.meal.icon + ' ' + cg(mealN, meal) + '</span>' +
+    (snackN ? '<span class="chip">' + KINDS.snack.icon + ' ' + cg(snackN, snackG) + '</span>' : '') +
     '<span class="chip">' + KINDS.walk.icon + ' ' + num(walk) + '分</span>' +
     '<span class="chip">' + KINDS.poop.icon + ' ' + poopN + '回' + (poopG ? ' / ' + num(poopG) + 'g' : '') + '</span>' +
     (peeN ? '<span class="chip">' + KINDS.pee.icon + ' ' + peeN + '回</span>' : '') +
-    (waterN ? '<span class="chip">' + KINDS.water.icon + ' ' + (waterG ? num(waterG) + 'g' : waterN + '回') + '</span>' : '') +
+    (waterN ? '<span class="chip">' + KINDS.water.icon + ' ' + cg(waterN, waterG) + '</span>' : '') +
     (medN ? '<span class="chip">' + KINDS.medicine.icon + ' ' + medN + '回</span>' : '') +
     (noteN ? '<span class="chip">' + KINDS.note.icon + ' ' + noteN + '件</span>' : '') +
     '<span class="chip">' + KINDS.weight.icon + ' ' + (wl != null ? num(wl) + 'g' : '—') + '</span></div></div>';
