@@ -157,7 +157,7 @@ var COLS = {
   logs: ['id', 'at', 'kind', 'value', 'text_value', 'memo', 'deleted', 'created_by', 'updated_by', 'created_at', 'updated_at'],
   conditions: ['id', 'name', 'started_on', 'status', 'meds', 'memo', 'deleted', 'created_by', 'updated_by', 'created_at', 'updated_at'],
   visits: ['id', 'visit_date', 'hospital', 'condition_id', 'cost', 'doctor_notes', 'next_visit', 'memo', 'deleted', 'created_by', 'updated_by', 'created_at', 'updated_at'],
-  photos: ['id', 'taken_on', 'path', 'caption', 'deleted', 'created_by', 'created_at']
+  photos: ['id', 'taken_on', 'path', 'caption', 'deleted', 'created_by', 'updated_by', 'created_at', 'updated_at']
 };
 function emptyData() { return { logs: [], conditions: [], visits: [], photos: [], profile: { dogName: '' }, profileAt: '' }; }
 function emptyDirty() { return { logs: {}, conditions: {}, visits: {}, photos: {}, profile: {} }; }
@@ -355,7 +355,7 @@ async function uploadPhotos(files) {
       var blob = await toUploadBlob(files[i]), id = uid('p_'), path = 'p/' + id + '.jpg';
       var r = await sb.storage.from(BUCKET).upload(path, blob, { contentType: 'image/jpeg', upsert: false });
       if (r.error) throw r.error;
-      var row = { id: id, taken_on: ui.date, path: path, caption: '', deleted: false, created_by: who, created_at: nowStr() };
+      var ts0 = nowStr(), row = { id: id, taken_on: ui.date, path: path, caption: '', deleted: false, created_by: who, updated_by: who, created_at: ts0, updated_at: ts0 };
       data.photos.push(row); markDirty('photos', row); ok++;
     } catch (e) { toast('⚠ 写真' + (i + 1) + '枚目：' + friendly(e)); await new Promise(function (r2) { setTimeout(r2, 1500); }); }
   }
@@ -509,7 +509,9 @@ function viewSettings() {
     (syncCfg ? '<button class="btn sec block" style="margin-top:8px" data-act="sync">今すぐ同期</button>' : '') + '</div>';
   h += '<div class="card"><h3>💾 バックアップ（CSV）</h3><div class="hint" style="margin-bottom:8px">無料プランにはバックアップがないため、ときどき保存してください。</div>' +
     '<div class="row" style="flex-wrap:wrap"><button class="btn sec" data-act="csv" data-t="logs">日々の記録</button><button class="btn sec" data-act="csv" data-t="visits">通院記録</button><button class="btn sec" data-act="csv" data-t="conditions">病気・投薬</button></div></div>';
-  h += '<div class="card"><h3>このアプリについて</h3><div class="hint">端末に保存した記録が正本で、同期すると家族の端末と共有されます。誤って入力した記録は「取り消す」で非表示にできます（完全には削除されません）。</div></div>';
+  var tn = trashItems().length;
+  h += '<div class="card"><h3>🗑 ゴミ箱</h3><div class="hint" style="margin-bottom:8px">取り消した記録・写真を、誰が取り消したかとあわせて確認し、元に戻せます。</div><button class="btn sec block" data-act="trash">ゴミ箱を開く（' + tn + '件）</button></div>';
+  h += '<div class="card"><h3>このアプリについて</h3><div class="hint">端末に保存した記録が正本で、同期すると家族の端末と共有されます。誤って入力した記録は「取り消す」で非表示にでき、設定のゴミ箱から元に戻せます（完全には削除されません）。</div></div>';
   return h;
 }
 
@@ -606,12 +608,55 @@ function saveCond(form) {
   else { row = Object.assign({ id: uid('c_'), deleted: false, created_by: who, updated_by: who, created_at: ts, updated_at: ts }, vals); data.conditions.push(row); }
   markDirty('conditions', row); closeSheet(); toast('登録しました');
 }
+function findRow(table, id) { return data[table].find(function (r) { return r.id === id; }); }
+function touch(table, row) { if (COLS[table].indexOf('updated_at') >= 0) { row.updated_at = nowStr(); row.updated_by = who; } }
 function voidRow(table, id, msg) {
-  if (!confirm(msg)) return;
-  var row = data[table].find(function (r) { return r.id === id; }); if (!row) return;
-  row.deleted = true; if ('updated_at' in row) { row.updated_at = nowStr(); row.updated_by = who; }
-  markDirty(table, row); closeSheet(); toast('取り消しました');
+  var row = findRow(table, id); if (!row) return;
+  if (!requireWho()) return;
+  var by = row.created_by ? '（入力した人：' + row.created_by + '）' : '';
+  if (!confirm(msg + '\n' + by + '\n取り消した人として「' + who + '」が記録されます。ゴミ箱から元に戻せます。')) return;
+  row.deleted = true; touch(table, row);
+  markDirty(table, row); closeSheet(); toast('取り消しました（設定のゴミ箱から戻せます）');
 }
+function restoreRow(table, id) {
+  var row = findRow(table, id); if (!row) return;
+  if (!requireWho()) return;
+  row.deleted = false; touch(table, row);
+  markDirty(table, row); toast('元に戻しました');
+  $('#sheetBody').innerHTML = trashBody(); hydratePhotos();
+}
+var TRASH_LABEL = { logs: '日々の記録', visits: '通院記録', conditions: '病気・投薬', photos: '写真' };
+function trashItems() {
+  var out = [];
+  Object.keys(TABLES).forEach(function (t) { data[t].forEach(function (r) { if (r.deleted) out.push({ t: t, r: r, ts: r.updated_at || r.created_at || '' }); }); });
+  out.sort(function (a, b) { return a.ts < b.ts ? 1 : a.ts > b.ts ? -1 : 0; });
+  return out;
+}
+function trashTitle(t, r) {
+  if (t === 'logs') { var k = KINDS[r.kind] || { icon: '📝', label: r.kind }; var v = r.text_value || (r.value != null && r.value !== '' ? r.value : ''); return k.icon + ' ' + esc(k.label) + (v !== '' ? '：' + esc(String(v).slice(0, 40)) : '') + '　' + esc(String(r.at || '').slice(0, 16)); }
+  if (t === 'visits') return '🏥 通院　' + esc(r.visit_date || '') + (r.hospital ? '　' + esc(r.hospital) : '');
+  if (t === 'conditions') return '💊 ' + esc(r.name || '');
+  return '📷 ' + esc(r.taken_on || '');
+}
+function trashBody() {
+  var items = trashItems();
+  if (!items.length) return '<div class="empty">ゴミ箱は空です。</div>';
+  var shown = items.slice(0, 100);
+  var h = '<div class="hint" style="margin-bottom:8px">取り消したものが新しい順に並びます（最大100件）。ファイル本体は消えていません。</div><ul class="tl">';
+  shown.forEach(function (it) {
+    var r = it.r, tt = it.t, when = it.ts ? String(it.ts).slice(5, 16) : '';
+    var by = r.updated_by ? esc(r.updated_by) + 'さんが取り消し' : '取り消した人：不明';
+    var title = trashTitle(tt, r);
+    h += '<li><div class="b">' +
+      (tt === 'photos' ? '<div class="viewer" style="max-width:160px;margin-bottom:6px"><img data-path="' + esc(r.path) + '" alt="写真"></div>' : '') +
+      '<div>' + title + '</div>' +
+      '<div class="m">' + TRASH_LABEL[tt] + '・入力：' + esc(r.created_by || '—') + '</div>' +
+      '<div class="m">' + by + (when ? '　' + esc(when) : '') + '</div>' +
+      '<button class="btn sec" style="min-height:38px;margin-top:6px" data-act="restore" data-t="' + tt + '" data-id="' + esc(r.id) + '">元に戻す</button></div></li>';
+  });
+  return h + '</ul>' + (items.length > shown.length ? '<div class="hint">ほか ' + (items.length - shown.length) + ' 件</div>' : '');
+}
+function openTrash() { openSheet('🗑 ゴミ箱', trashBody()); hydratePhotos(); }
 function openPhoto(id) {
   var p = data.photos.find(function (x) { return x.id === id; }); if (!p) return;
   openSheet('📷 ' + p.taken_on, '<div class="viewer"><img data-path="' + esc(p.path) + '" alt="写真"></div>' +
@@ -656,6 +701,8 @@ document.addEventListener('click', function (e) {
     case 'voidPhoto': voidRow('photos', id, 'この写真を非表示にしますか？'); break;
     case 'addPhoto': if (requireWho()) { if (!sb) toast('写真は、設定でクラウド同期を接続してから使えます'); else $('#photoFile').click(); } break;
     case 'viewPhoto': openPhoto(id); break;
+    case 'trash': openTrash(); break;
+    case 'restore': restoreRow(el.getAttribute('data-t'), id); break;
     case 'csv': exportCsv(el.getAttribute('data-t')); break;
     case 'saveBasic': {
       var nd = ($('#setDog').value || '').trim(), nw = ($('#setWho').value || '').trim();
@@ -685,7 +732,7 @@ document.addEventListener('submit', function (e) {
   if (t === 'entry') saveEntry(f);
   else if (t === 'visit') saveVisit(f);
   else if (t === 'cond') saveCond(f);
-  else if (t === 'photo') { var p = data.photos.find(function (x) { return x.id === f.getAttribute('data-id'); }); if (p) { p.caption = String(new FormData(f).get('caption') || '').trim(); markDirty('photos', p); } closeSheet(); }
+  else if (t === 'photo') { var p = data.photos.find(function (x) { return x.id === f.getAttribute('data-id'); }); if (p) { p.caption = String(new FormData(f).get('caption') || '').trim(); touch('photos', p); markDirty('photos', p); } closeSheet(); }
   else if (t === 'who') {
     var fd = new FormData(f), nw = String(fd.get('who') || '').trim(), nd = String(fd.get('dog') || '').trim();
     if (!nw) { toast('呼び名を入力してください'); return; }
